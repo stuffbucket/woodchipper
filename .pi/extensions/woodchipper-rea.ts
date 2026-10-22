@@ -17,6 +17,7 @@ import {
 	loadPlaybookContent,
 	PLAYBOOK_CATALOG,
 	type PlaybookId,
+	resolveReaProviderEnv,
 	runReaDoctorSummary,
 	runStaticTriage,
 } from "./lib/triage.ts";
@@ -266,6 +267,7 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			command: "pnpm",
 			args: ["exec", "rea", "mcp"],
 			cwd: projectRoot,
+			env: resolveReaProviderEnv(),
 			description:
 				"Reverse Engineer Anything (REA) MCP server providing static, dynamic, firmware, JS/Electron, mobile, and reconstruction tools.",
 		});

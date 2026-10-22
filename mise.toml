@@ -1,10 +1,17 @@
 # Project toolchain and task definitions for woodchipper.
 # Node and pnpm match the rest of ~/github/stuffbucket and package.json's `packageManager`.
+# Temurin JDK 21 powers headless Ghidra 12.1.4 for REA (`rea-agents@6.7.0`).
 
 [tools]
 node = "22.23.3"
 pnpm = "12.11.2"
 python = "3.12.15"
+java = "temurin-21.0.12+101.0.LTS"
+
+[env]
+GHIDRA_INSTALL_DIR = "{{env.HOME}}/.local/share/ghidra/ghidra_12.1.4_PUBLIC"
+JAVA_HOME = "{{env.HOME}}/.local/share/mise/installs/java/temurin-21.0.12+101.0.LTS"
+GHIDRA_HEADLESS_MAXMEM = "4G"
 
 [settings]
 lockfile = true
@@ -42,8 +49,8 @@ description = "Run the Woodchipper security & logic mutation test suite"
 run = "pnpm run test:mutate"
 
 [tasks.doctor]
-description = "Run REA environment and external tool readiness check"
-run = "pnpm exec rea doctor --client claude_code --json"
+description = "Run REA environment and external tool readiness check (Claude Code + Pi + Ghidra 12.1.4 + Skill Identity)"
+run = "pnpm run doctor"
 
 [tasks.rea]
 description = "Invoke the local rea CLI directly: mise run rea -- <subcommand> [args]"

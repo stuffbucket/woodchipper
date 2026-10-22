@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveReaProviderEnv } from "../.pi/extensions/lib/triage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -96,7 +97,7 @@ function runDaemonMode(extraArgs) {
 		cwd: PROJECT_ROOT,
 		stdio: ["pipe", "pipe", "inherit"],
 		env: {
-			...process.env,
+			...resolveReaProviderEnv(),
 			WOODCHIPPER_PEER_NAME: process.env.WOODCHIPPER_PEER_NAME || "woodchipper",
 		},
 	});
@@ -191,6 +192,7 @@ Usage:
 	const child = spawn(piCmd.command, [...piCmd.prefixArgs, ...piArgs], {
 		cwd: PROJECT_ROOT,
 		stdio: "inherit",
+		env: resolveReaProviderEnv(),
 	});
 	attachChildErrorHandler(child, piCmd.command);
 

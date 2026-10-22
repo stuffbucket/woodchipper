@@ -52,7 +52,7 @@
     "ctl": "node --experimental-strip-types scripts/woodchipper-ctl.mjs",
     "build:harness": "node --experimental-strip-types scripts/build-harness.mjs",
     "rea": "rea",
-    "doctor": "rea doctor --client claude_code --json",
+    "doctor": "GHIDRA_INSTALL_DIR=${GHIDRA_INSTALL_DIR:-$HOME/.local/share/ghidra/ghidra_12.1.4_PUBLIC} JAVA_HOME=${JAVA_HOME:-$HOME/.local/share/mise/installs/java/temurin-21.0.12+101.0.LTS} rea doctor --client claude_code --client pi --provider ghidra --skill --json",
     "test": "node --experimental-strip-types --test tests/validate-woodchipper.test.mjs tests/pi-extension.test.mjs tests/peer-extension.test.mjs",
     "test:mutate": "node --experimental-strip-types scripts/mutation-test.mjs",
     "validate": "node scripts/validate.mjs",

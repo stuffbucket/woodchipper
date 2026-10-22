@@ -1,7 +1,33 @@
 import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
+
+/**
+ * Resolve default REA provider environment (Ghidra 12.1.4 + Temurin JDK 21)
+ * when not already set in `process.env`.
+ */
+export function resolveReaProviderEnv(baseEnv: NodeJS.ProcessEnv = process.env): Record<string, string> {
+	const home = os.homedir();
+	const defaultGhidraDir = path.join(home, ".local", "share", "ghidra", "ghidra_12.1.4_PUBLIC");
+	const defaultJavaHome = path.join(home, ".local", "share", "mise", "installs", "java", "temurin-21.0.12+101.0.LTS");
+
+	const env: Record<string, string> = {};
+	for (const [k, v] of Object.entries(baseEnv)) {
+		if (typeof v === "string") env[k] = v;
+	}
+	if (!env.GHIDRA_INSTALL_DIR && fs.existsSync(defaultGhidraDir)) {
+		env.GHIDRA_INSTALL_DIR = defaultGhidraDir;
+	}
+	if (!env.JAVA_HOME && fs.existsSync(defaultJavaHome)) {
+		env.JAVA_HOME = defaultJavaHome;
+	}
+	if (!env.GHIDRA_HEADLESS_MAXMEM) {
+		env.GHIDRA_HEADLESS_MAXMEM = "4G";
+	}
+	return env;
+}
 
 /** Maximum file size read into memory for SHA-256 fallback (64 MiB). */
 export const MAX_INLINE_HASH_BYTES = 64 * 1024 * 1024;
@@ -558,13 +584,19 @@ function checkBinaryInPath(binName: string, versionArg = "--version"): { availab
 
 export function runReaDoctorSummary(projectRoot: string): ReaDoctorSummary {
 	let parsed: Record<string, unknown> = {};
+	const doctorEnv = resolveReaProviderEnv();
 	try {
-		const out = execFileSync("pnpm", ["exec", "rea", "doctor", "--json"], {
-			cwd: projectRoot,
-			encoding: "utf8",
-			timeout: 30000,
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+		const out = execFileSync(
+			"pnpm",
+			["exec", "rea", "doctor", "--client", "claude_code", "--client", "pi", "--provider", "ghidra", "--skill", "--json"],
+			{
+				cwd: projectRoot,
+				env: doctorEnv,
+				encoding: "utf8",
+				timeout: 30000,
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
 		parsed = JSON.parse(out.trim()) as Record<string, unknown>;
 	} catch (err: unknown) {
 		// rea doctor exits non-zero when some backends are unconfigured but still prints JSON to stdout
