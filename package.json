@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@stuffbucket/woodchipper",
   "version": "1.0.0",
-  "description": "Reverse-engineering skill pack, playbooks, workflows, and vendored REA/REAP reference library optimized for 5.5-series models.",
+  "description": "Reverse-engineering Pi agent harness, skill pack, playbooks, workflows, and vendored REA/REAP/Pi library optimized for 5.5-series models.",
   "type": "module",
   "packageManager": "pnpm@12.11.2",
   "license": "Apache-2.0",
@@ -11,20 +11,29 @@
     "type": "git",
     "url": "https://github.com/stuffbucket/woodchipper"
   },
+  "bin": {
+    "woodchipper": "./bin/woodchipper.mjs",
+    "woodchipper-ctl": "./scripts/woodchipper-ctl.mjs"
+  },
   "keywords": [
     "reverse-engineering",
     "rea",
     "rea-agents",
     "reap",
+    "pi",
+    "pi-coding-agent",
+    "a2a",
     "agent-skills",
     "workflows",
     "mcp"
   ],
   "files": [
+    "bin/",
     "skills/",
     "playbooks/",
     ".claude/workflows/",
     ".claude-plugin/",
+    ".pi/",
     ".mcp.json",
     "mise.toml",
     "vendor/",
@@ -38,9 +47,14 @@
     "rea-agents": "6.7.0"
   },
   "scripts": {
+    "woodchipper": "node --experimental-strip-types bin/woodchipper.mjs",
+    "daemon": "node --experimental-strip-types bin/woodchipper.mjs daemon",
+    "ctl": "node --experimental-strip-types scripts/woodchipper-ctl.mjs",
+    "build:harness": "node --experimental-strip-types scripts/build-harness.mjs",
     "rea": "rea",
     "doctor": "rea doctor --client claude_code --json",
-    "test": "node --test tests/validate-woodchipper.test.mjs",
+    "test": "node --experimental-strip-types --test tests/validate-woodchipper.test.mjs tests/pi-extension.test.mjs tests/peer-extension.test.mjs",
+    "test:mutate": "node --experimental-strip-types scripts/mutation-test.mjs",
     "validate": "node scripts/validate.mjs",
     "sync:skills": "node scripts/sync-to-stuffbucket-skills.mjs",
     "update:vendor": "node scripts/update-vendor.mjs"

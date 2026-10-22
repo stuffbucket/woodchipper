@@ -6,11 +6,12 @@ Agent routing and architecture index for `woodchipper`.
 
 | Layer | Location | Role |
 |---|---|---|
+| **Pi Agent Harness** | `bin/woodchipper.mjs`, `.pi/` | Custom Pi harness loading `woodchipper-rea.ts` (REA MCP + 3-bucket ledger + summary guardrails) and `woodchipper-peer.ts` (Claude Code `peerProtocol: 1` UDS A2A bridge) |
 | **Root Skill Router** | `skills/woodchipper/SKILL.md` | Classifies target artifact + user goal, enforces 5.5-series discipline, and routes to domain sub-skills |
 | **Domain Sub-Skills** | `skills/woodchipper-*/SKILL.md` | 8 focused `<500`-line skills mapping exact REA MCP tools & CLI commands to target families |
 | **Harness Workflows** | `.claude/workflows/*.js` | 5 deterministic multi-agent orchestration scripts (`triage-target`, `trace-feature`, `clean-room-spec`, `security-audit`, `version-diff`) |
 | **Playbooks** | `playbooks/*.md` | End-to-end human + agent playbooks combining REAP prompt intent with exact REA tool execution |
-| **Vendored Upstreams** | `vendor/rea/`, `vendor/rea-prompts/` | Pinned upstream reference docs, tool/prompt contracts (`toolContracts.ts`), bridges, and REAP catalog |
+| **Vendored Upstreams** | `vendor/pi/`, `vendor/rea/`, `vendor/rea-prompts/` | `earendil-works/pi` git submodule + pinned REA docs, tool/prompt contracts (`toolContracts.ts`), bridges, and REAP catalog |
 
 ## Skill Routing Table
 

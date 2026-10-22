@@ -74,6 +74,31 @@ if (!fs.existsSync(manifestPath)) {
   }
 }
 
+// 4. Validate Pi Harness & Submodule (.pi/extensions/*, bin/woodchipper.mjs, vendor/pi)
+const requiredHarnessFiles = [
+  '.pi/settings.json',
+  '.pi/SYSTEM.md',
+  '.pi/extensions/woodchipper-rea.ts',
+  '.pi/extensions/woodchipper-peer.ts',
+  '.pi/extensions/lib/evidence-ledger.ts',
+  '.pi/extensions/lib/triage.ts',
+  '.pi/extensions/lib/peer-protocol.ts',
+  '.pi/extensions/lib/schema.ts',
+  'bin/woodchipper.mjs',
+  'scripts/woodchipper-ctl.mjs',
+  'scripts/build-harness.mjs',
+  'vendor/pi/package.json',
+  'vendor/pi/packages/coding-agent/package.json'
+]
+for (const rel of requiredHarnessFiles) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) {
+    fail(`Missing required Pi harness file: ${rel}`)
+  } else {
+    ok(`Harness file ${rel}`)
+  }
+}
+
 if (errors > 0) {
   console.error(`\nValidation failed with ${errors} error(s).`)
   process.exit(1)

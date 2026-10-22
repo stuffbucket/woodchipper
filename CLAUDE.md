@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (`claude.ai/code`) and 5.5-series Cla
 `woodchipper` combines:
 1. **`morluto/rea` (`rea-agents@6.7.0`)** — the Reverse Engineer Anything MCP server, CLI, contracts, bridges, and reference documentation (`vendor/rea/`).
 2. **`JoasASantos/REA-Prompts` (REAP)** — the human-to-agent reverse-engineering prompt catalog (`vendor/rea-prompts/README.md`).
+3. **`earendil-works/pi` (`@earendil-works/pi-coding-agent@1.3.0`)** — vendored as a Git submodule at `vendor/pi` and customized via `.pi/extensions/` (`woodchipper-rea.ts`, `woodchipper-peer.ts`), `.pi/SYSTEM.md`, `.pi/settings.json`, `bin/woodchipper.mjs`, and `scripts/woodchipper-ctl.mjs`.
 
-And reorganizes them into a **progressive-disclosure skill pack (`skills/woodchipper*`)**, **deterministic multi-agent workflows (`.claude/workflows/*.js`)**, and **structured playbooks (`playbooks/*.md`)** tailored for Claude 5.5-series models and the Claude Code harness.
+And reorganizes them into a **dual-surface Pi reverse-engineering harness** (interactive human TUI + native Claude Code `peerProtocol: 1` A2A socket), a **progressive-disclosure skill pack (`skills/woodchipper*`)**, **deterministic multi-agent workflows (`.claude/workflows/*.js`)**, and **structured playbooks (`playbooks/*.md`)** tailored for Claude 5.5-series models.
 
 ## Operating Discipline for 5.5-Series Models
 
@@ -23,13 +24,23 @@ And reorganizes them into a **progressive-disclosure skill pack (`skills/woodchi
 This repository uses **`mise`** (`mise.toml`) and **`pnpm`** (`pnpm@12.11.2`, Node `22.23.3`, Python `3.12.15`), with `rea-agents@6.7.0` installed locally via `pnpm` so the MCP server (`.mcp.json`) and CLI run via `pnpm exec rea` without network `npx` fetches.
 
 ```bash
-# Install pinned dependencies
-mise run setup        # or: pnpm install --frozen-lockfile
+# Install pinned dependencies and build/verify the Woodchipper Pi harness
+mise run setup        # or: pnpm install --frozen-lockfile && pnpm run build:harness
+
+# Launch interactive Woodchipper Pi TUI (also registers live Claude Code peerProtocol:1 socket)
+mise run tui          # or: pnpm run woodchipper -- tui
+
+# Launch headless Woodchipper Pi peer daemon (controllable via Claude Code SendMessage or woodchipper-ctl)
+mise run daemon       # or: pnpm run daemon
+
+# Control or message Woodchipper / Claude Code peers over UDS
+mise run ctl -- peers
+mise run ctl -- send woodchipper "Triage /path/to/binary" --wait
 
 # Run REA environment & backend readiness check
 mise run doctor       # or: pnpm run doctor
 
-# Validate skills, workflows, and vendor manifest
+# Validate skills, workflows, Pi harness extensions, and vendor manifest
 mise run validate     # or: pnpm run validate
 
 # Run test suite

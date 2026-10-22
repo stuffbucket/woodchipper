@@ -10,16 +10,36 @@ python = "3.12.15"
 lockfile = true
 
 [tasks.setup]
-description = "Install pinned pnpm dependencies (including rea-agents)"
-run = "pnpm install --frozen-lockfile"
+description = "Install pinned pnpm dependencies and build/verify the Woodchipper Pi harness"
+run = ["pnpm install --frozen-lockfile", "pnpm run build:harness"]
+
+[tasks."build:harness"]
+description = "Verify and build the customized Woodchipper Pi harness (pass --with-submodule-build to compile vendor/pi)"
+run = "pnpm run build:harness"
+
+[tasks.tui]
+description = "Launch the interactive Woodchipper Pi TUI (with live Claude Code peerProtocol:1 A2A socket active)"
+run = "pnpm run woodchipper -- tui"
+
+[tasks.daemon]
+description = "Run headless Woodchipper Pi peer daemon listening for Claude Code SendMessage or woodchipper-ctl"
+run = "pnpm run daemon"
+
+[tasks.ctl]
+description = "Control or message Woodchipper / Claude Code peers: mise run ctl -- [peers|status|ledger|send]"
+run = "pnpm run ctl --"
 
 [tasks.validate]
-description = "Validate Woodchipper skills, workflows, and vendor manifest"
+description = "Validate Woodchipper skills, workflows, Pi harness extensions, and vendor manifest"
 run = "pnpm run validate"
 
 [tasks.test]
 description = "Run the Woodchipper node:test validation suite"
 run = "pnpm test"
+
+[tasks."test:mutate"]
+description = "Run the Woodchipper security & logic mutation test suite"
+run = "pnpm run test:mutate"
 
 [tasks.doctor]
 description = "Run REA environment and external tool readiness check"

@@ -1,6 +1,29 @@
 # Woodchipper
 
-**Woodchipper** combines [`morluto/rea`](https://github.com/morluto/rea) (`rea-agents@6.7.0`, the Reverse Engineer Anything MCP server, CLI, contracts, and reference library) and [`JoasASantos/REA-Prompts`](https://github.com/JoasASantos/REA-Prompts) (the REAP prompt collection) into a progressive-disclosure skill pack, playbook collection, and multi-agent workflow library optimized for **Claude 5.5-series models** (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-fable-5-1`) and the Claude Code harness.
+**Woodchipper** combines:
+- [`earendil-works/pi`](https://github.com/earendil-works/pi) (`@earendil-works/pi-coding-agent@1.3.0`, vendored as a Git submodule at `vendor/pi`)
+- [`morluto/rea`](https://github.com/morluto/rea) (`rea-agents@6.7.0`, the Reverse Engineer Anything MCP server, CLI, contracts, and reference library)
+- [`JoasASantos/REA-Prompts`](https://github.com/JoasASantos/REA-Prompts) (the REAP prompt collection)
+
+into a **custom Pi reverse-engineering harness**, progressive-disclosure skill pack, playbook collection, and multi-agent workflow library optimized for **Claude 5.5-series models** (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-fable-5-1`) and cross-instance **Claude Code peer (`peerProtocol: 1`) / A2A control**.
+
+---
+
+## Custom Pi Harness + Claude Code Cross-Instance (`peerProtocol: 1` / A2A) Architecture
+
+Woodchipper customizes Pi via `.pi/extensions/`, `.pi/SYSTEM.md`, `.pi/settings.json`, and `bin/woodchipper.mjs` so the harness can be driven **either directly by a human in the terminal TUI or across instances by Claude Code (`ListAgents` / `SendMessage`)**:
+
+1. **Reverse-Engineering Extension (`.pi/extensions/woodchipper-rea.ts`)**
+   - Automatically registers the local `rea` MCP server (`pnpm exec rea mcp`).
+   - **Summary-First Context Guardrail (`tool_call` hook):** Intercepts high-volume REA tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_macho`, `inspect_artifact`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_web_network_capture`) and defaults `detail: "summary"` whenever omitted so the model never blows out context on an initial call.
+   - **Automatic Evidence Ledger (`tool_result` hook + `woodchipper_ledger` tool):** Extracts every `evidence_id` and `parent_evidence_id` (`ev_...`) returned by REA into `.woodchipper/evidence-ledger.json` and maintains the 3-bucket epistemology (**Observations**, **Inferences**, **Unknowns**).
+   - **Custom Tools & Slash Commands:** Registers `woodchipper_triage`, `woodchipper_ledger`, and `woodchipper_playbook`, plus `/triage`, `/trace`, `/clone-spec`, `/audit`, `/ledger`, and `/doctor`.
+2. **Claude Code Peer & A2A Bridge Extension (`.pi/extensions/woodchipper-peer.ts`)**
+   - Implements Claude Code's native local cross-session discovery and messaging protocol (`peerProtocol: 1`):
+     - Writes `~/.claude/sessions/<pid>.json` (`name: "woodchipper"`) and `~/.claude/sessions/<pid>.<sha256(socketPath)>.key`.
+     - Listens on Unix Domain Socket `/tmp/cc-socks/<pid>.sock` (symlinked at `.woodchipper/peer.sock`).
+   - **Drive from Claude Code:** Any Claude Code session on the machine sees `woodchipper` in `ListAgents` and can message it directly with `SendMessage({ to: "woodchipper", message: "Triage /path/to/target" })`. Woodchipper injects the prompt into the live Pi session (visible in real time if a human is watching the TUI, or executed headlessly in `daemon` mode) and sends the structured response back to the calling Claude Code session's UDS socket when `agent_settled` fires.
+   - **Drive from CLI (`scripts/woodchipper-ctl.mjs`):** Query peers, status, ledger, or send synchronous `--wait` A2A prompts from any shell.
 
 ---
 
@@ -39,6 +62,15 @@ A common point of confusion when looking at `JoasASantos/REA-Prompts` and `morlu
 
 ```text
 woodchipper/
+├── bin/
+│   └── woodchipper.mjs                # Unified Pi harness launcher (tui, daemon, rpc, ask, build-pi)
+├── .pi/
+│   ├── settings.json                  # Project-local Pi configuration (tools, skills, extensions)
+│   ├── SYSTEM.md                      # Woodchipper 5.5-series system prompt addendum
+│   └── extensions/
+│       ├── woodchipper-rea.ts         # REA MCP wiring, summary-first guardrails, tools & commands
+│       ├── woodchipper-peer.ts        # Claude Code peerProtocol:1 UDS server & claude_peers tool
+│       └── lib/                       # Evidence ledger, static triage, peer protocol, schema helpers
 ├── .claude-plugin/
 │   ├── marketplace.json               # Stuffbucket local plugin marketplace manifest
 │   └── plugin.json                    # Claude Code plugin definition
@@ -66,32 +98,41 @@ woodchipper/
 │   ├── clean-room-and-porting.md
 │   ├── security-and-vr.md
 │   └── firmware-and-protocols.md
-├── vendor/                            # Pinned upstream files (tracked via vendor/MANIFEST.json)
+├── vendor/                            # Pinned upstream files & submodules (vendor/MANIFEST.json)
 │   ├── MANIFEST.json
+│   ├── pi/                            # earendil-works/pi git submodule (@earendil-works/pi-coding-agent)
 │   ├── rea/                           # morluto/rea@6.7.0 skills, docs, contracts, bridges
 │   └── rea-prompts/                   # JoasASantos/REA-Prompts catalog
 ├── scripts/
-│   ├── validate.mjs                   # Validates skills, workflows, and vendor manifest
+│   ├── build-harness.mjs              # Verifies & prepares the Woodchipper Pi harness (+ optional submodule build)
+│   ├── woodchipper-ctl.mjs            # CLI controller for Claude Code & Woodchipper UDS peers
+│   ├── validate.mjs                   # Validates skills, workflows, Pi harness, and vendor manifest
 │   ├── sync-to-stuffbucket-skills.mjs # Copies skills/woodchipper* into ../skills
 │   └── update-vendor.mjs              # Updates vendor/ from upstream git repos
 └── tests/
-    └── validate-woodchipper.test.mjs  # Node test suite
+    ├── validate-woodchipper.test.mjs  # Skill, workflow, and vendor manifest tests
+    ├── pi-extension.test.mjs          # Woodchipper REA Pi extension & Evidence Ledger tests
+    └── peer-extension.test.mjs        # Claude Code peerProtocol:1 & A2A UDS socket tests
 ```
 
 ## Quick Start (`mise` + `pnpm`)
 
 ```bash
-# 1. Trust mise.toml and install pinned dependencies (including local rea-agents@6.7.0)
+# 1. Trust mise.toml, install pinned dependencies, and verify the Pi harness
 mise trust
 mise run setup
 
-# 2. Verify REA readiness on your machine
-mise run doctor
+# 2. Launch interactive Woodchipper Pi TUI (human-driven + live Claude Code peer socket)
+mise run tui
 
-# 3. Validate Woodchipper skills, workflows, and vendored upstreams
+# 3. Or run headless Woodchipper Pi peer daemon for Claude Code SendMessage / A2A control
+mise run daemon
+
+# 4. List live local Claude Code & Woodchipper peers or send an A2A prompt
+mise run ctl -- peers
+mise run ctl -- send woodchipper "Triage /abs/path/to/binary" --wait
+
+# 5. Validate Woodchipper skills, workflows, Pi extensions, and vendored upstreams
 mise run validate
 mise run test
-
-# 4. Optional: Sync the 9 woodchipper skills into ~/github/stuffbucket/skills
-mise run sync:skills
 ```

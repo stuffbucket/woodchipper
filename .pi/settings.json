@@ -1,0 +1,22 @@
+{
+  "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "defaultThinkingLevel": "high",
+  "defaultTools": [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "+grep",
+    "+find",
+    "+ls",
+    "+codemode"
+  ],
+  "extensions": [
+    "./extensions/woodchipper-rea.ts",
+    "./extensions/woodchipper-peer.ts"
+  ],
+  "skills": [
+    "../skills"
+  ],
+  "enableSkillCommands": true
+}
