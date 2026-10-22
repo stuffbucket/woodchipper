@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-10-22T00:38:00Z",
+  "upstreams": {
+    "rea": {
+      "repository": "https://github.com/morluto/rea",
+      "package": "rea-agents@6.7.0",
+      "commit": "b6007e0a58f5acab573eb9f2adcdbe24d7eee6af",
+      "license": "MIT",
+      "vendored_paths": [
+        "README.md",
+        "AGENTS.md",
+        "LICENSE",
+        "DISCLAIMER.md",
+        "THIRD_PARTY_NOTICES.md",
+        "package.json",
+        "server.json",
+        "skills/",
+        "docs/",
+        "contracts/",
+        "bridge/"
+      ]
+    },
+    "rea_prompts": {
+      "repository": "https://github.com/JoasASantos/REA-Prompts",
+      "commit": "349a59ba476675889b6d88536fb42936ec02af83",
+      "license": "MIT",
+      "vendored_paths": [
+        "README.md"
+      ]
+    }
+  }
+}

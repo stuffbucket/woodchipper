@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@stuffbucket/woodchipper",
+  "version": "1.0.0",
+  "description": "Reverse-engineering skill pack, playbooks, workflows, and vendored REA/REAP reference library optimized for 5.5-series models.",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "license": "Apache-2.0",
+  "author": "stuffbucket",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stuffbucket/woodchipper"
+  },
+  "keywords": [
+    "reverse-engineering",
+    "rea",
+    "rea-agents",
+    "reap",
+    "agent-skills",
+    "workflows",
+    "mcp"
+  ],
+  "files": [
+    "skills/",
+    "playbooks/",
+    ".claude/workflows/",
+    ".claude-plugin/",
+    ".mcp.json",
+    "mise.toml",
+    "vendor/",
+    "scripts/",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "rea-agents": "6.7.0"
+  },
+  "scripts": {
+    "rea": "rea",
+    "doctor": "rea doctor --client claude_code --json",
+    "test": "node --test tests/validate-woodchipper.test.mjs",
+    "validate": "node scripts/validate.mjs",
+    "sync:skills": "node scripts/sync-to-stuffbucket-skills.mjs",
+    "update:vendor": "node scripts/update-vendor.mjs"
+  }
+}

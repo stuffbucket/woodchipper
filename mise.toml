@@ -1,0 +1,38 @@
+# Project toolchain and task definitions for woodchipper.
+# Node and pnpm match the rest of ~/github/stuffbucket and package.json's `packageManager`.
+
+[tools]
+node = "22.23.3"
+pnpm = "12.11.2"
+python = "3.12.15"
+
+[settings]
+lockfile = true
+
+[tasks.setup]
+description = "Install pinned pnpm dependencies (including rea-agents)"
+run = "pnpm install --frozen-lockfile"
+
+[tasks.validate]
+description = "Validate Woodchipper skills, workflows, and vendor manifest"
+run = "pnpm run validate"
+
+[tasks.test]
+description = "Run the Woodchipper node:test validation suite"
+run = "pnpm test"
+
+[tasks.doctor]
+description = "Run REA environment and external tool readiness check"
+run = "pnpm exec rea doctor --client claude_code --json"
+
+[tasks.rea]
+description = "Invoke the local rea CLI directly: mise run rea -- <subcommand> [args]"
+run = "pnpm exec rea"
+
+[tasks."sync:skills"]
+description = "Sync skills/woodchipper* into ../skills/plugins/stuffbucket/skills"
+run = "pnpm run sync:skills"
+
+[tasks."update:vendor"]
+description = "Refresh vendor/ from upstream morluto/rea and JoasASantos/REA-Prompts"
+run = "pnpm run update:vendor"

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "woodchipper",
+  "description": "Reverse-engineering skill pack, playbooks, and deterministic multi-agent workflows combining morluto/rea and JoasASantos/REA-Prompts for 5.5-series models",
+  "owner": {
+    "name": "Stuffbucket",
+    "email": "contact@stuffbucket.co"
+  },
+  "plugins": [
+    {
+      "name": "woodchipper",
+      "description": "Reverse-engineering skill family (woodchipper-*), playbooks, workflows, and REA MCP wiring",
+      "version": "1.0.0",
+      "author": {
+        "name": "Stuffbucket",
+        "email": "contact@stuffbucket.co"
+      },
+      "source": ".",
+      "category": "security",
+      "strict": false,
+      "homepage": "https://github.com/stuffbucket/woodchipper"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Vendored upstream components in `vendor/rea/` are licensed under the Apache License 2.0 (Copyright morluto / Reverse Engineer Anything contributors; see `vendor/rea/LICENSE` and `vendor/rea/THIRD_PARTY_NOTICES.md`).
+Vendored prompt templates in `vendor/rea-prompts/` originate from `JoasASantos/REA-Prompts` (Copyright Joas A Santos).
+Woodchipper skill pack, playbooks, and workflow scripts are licensed under the Apache License 2.0.
