@@ -6,6 +6,8 @@
 2. **[`JoasASantos/REA-Prompts`](https://github.com/JoasASantos/REA-Prompts) (REAP)** — the 16-section human-to-agent reverse-engineering prompt catalog (`vendor/rea-prompts/README.md`).
 3. **[`earendil-works/pi`](https://github.com/earendil-works/pi) (`@earendil-works/pi-coding-agent@1.4.0`)** — vendored as a Git submodule at `vendor/pi` and customized with project-local extensions (`.pi/extensions/`), system prompts (`.pi/SYSTEM.md`), and a Claude Code `peerProtocol: 1` Unix Domain Socket (UDS) bridge.
 
+**Documentation:** [stuffbucket.github.io/woodchipper](https://stuffbucket.github.io/woodchipper/)
+
 ---
 
 ## How the Repository Works

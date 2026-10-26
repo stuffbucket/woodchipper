@@ -32,6 +32,14 @@ run = "pnpm run build:pi"
 description = "Verify and build the customized Woodchipper Pi harness (pass --with-submodule-build to stage the audited Pi runtime)"
 run = "pnpm run build:harness"
 
+[tasks.site]
+description = "Run the Woodchipper documentation site locally"
+run = "pnpm run site"
+
+[tasks."site:build"]
+description = "Build the Woodchipper documentation site"
+run = "pnpm run site:build"
+
 [tasks.tui]
 description = "Launch the interactive Woodchipper Pi TUI (with live Claude Code peerProtocol:1 A2A socket active)"
 run = "pnpm run woodchipper -- tui"

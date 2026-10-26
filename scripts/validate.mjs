@@ -216,15 +216,37 @@ const requiredHarnessFiles = [
   'vendor/overrides/Dockerfile',
   'vendor/overrides/pi-audit.json',
   'vendor/pi/package.json',
-  'vendor/pi/packages/coding-agent/package.json'
+  'vendor/pi/packages/coding-agent/package.json',
+  'site/package.json',
+  'site/astro.config.mjs',
+  'site/src/pages/index.astro',
+  'site/src/content/docs/start.md',
+  'site/src/content/docs/examples/index.md',
+  '.github/workflows/site.yml'
 ]
 for (const rel of requiredHarnessFiles) {
   const p = path.join(ROOT, rel)
   if (!fs.existsSync(p)) {
-    fail(`Missing required Pi harness file: ${rel}`)
+    fail(`Missing required project file: ${rel}`)
   } else {
-    ok(`Harness file ${rel}`)
+    ok(`Project file ${rel}`)
   }
+}
+
+// 7. Validate the public documentation site and Pages deployment
+const sitePackage = JSON.parse(fs.readFileSync(path.join(ROOT, 'site', 'package.json'), 'utf8'))
+const siteConfig = fs.readFileSync(path.join(ROOT, 'site', 'astro.config.mjs'), 'utf8')
+const siteWorkflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'site.yml'), 'utf8')
+if (
+  sitePackage.dependencies?.astro !== '7.3.8' ||
+  sitePackage.dependencies?.['@astrojs/starlight'] !== '0.42.6' ||
+  !siteConfig.includes('"/woodchipper/"') ||
+  !siteWorkflow.includes('actions/configure-pages@') ||
+  !siteWorkflow.includes('actions/deploy-pages@')
+) {
+  fail('Documentation site must keep exact Astro/Starlight pins, the Pages base path, and the Pages deployment workflow')
+} else {
+  ok('Documentation site is version-pinned and configured for GitHub Pages')
 }
 
 if (errors > 0) {

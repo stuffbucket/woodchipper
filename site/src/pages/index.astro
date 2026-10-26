@@ -1,0 +1,121 @@
+---
+import Plain from "../layouts/Plain.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const jobs = [
+  { href: "examples/triage/", title: "Triage an unfamiliar target", text: "Identify the format, architecture, runtime, major components, and next investigation points." },
+  { href: "examples/feature-trace/", title: "Trace one feature", text: "Follow a user action, command, or message across functions, modules, and process boundaries." },
+  { href: "examples/clean-room-spec/", title: "Write a clean-room spec", text: "Record behavior, state, data formats, and error cases without copying implementation code." },
+  { href: "examples/security-audit/", title: "Audit a trust boundary", text: "Trace untrusted inputs to sensitive operations and record the checks on each path." },
+  { href: "examples/version-diff/", title: "Compare two versions", text: "Separate changed behavior from build noise and inspect related callers for incomplete fixes." },
+  { href: "examples/firmware/", title: "Inspect firmware", text: "Map partitions, filesystems, boot code, embedded endpoints, and update verification paths." },
+];
+const docs = [
+  { href: "start/", title: "Get started", text: "Install, check the toolchain, and run the first triage." },
+  { href: "what-it-does/", title: "What it does", text: "Capabilities, limits, and when to use normal source tools instead." },
+  { href: "supported-targets/", title: "Supported targets", text: "Native, web, mobile, managed, firmware, captures, and crashes." },
+  { href: "evidence/", title: "Evidence and reports", text: "Observations, inferences, unknowns, and evidence IDs." },
+  { href: "headless/", title: "Run headless", text: "Use the daemon, controller, or a local Claude Code peer." },
+  { href: "commands/", title: "Commands", text: "TUI commands, scripts, checks, and direct REA access." },
+];
+---
+
+<Plain
+  title="Woodchipper"
+  description="Inspect binaries, apps, firmware, captures, and crashes with a local reverse-engineering agent."
+>
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Reverse-engineering agent harness</p>
+        <h1>Inspect shipped software with evidence.</h1>
+        <p class="lead">
+          Give Woodchipper a binary, app, package, firmware image, network capture, or crash. Ask a question. It runs
+          local inspection tools and separates what it observed, what it inferred, and what it could not verify.
+        </p>
+        <div class="actions">
+          <a class="button primary" href={`${base}start/`}>Get started</a>
+          <a class="button" href={`${base}examples/`}>See examples</a>
+        </div>
+      </div>
+
+      <div class="report" aria-label="Example report structure">
+        <div class="report-head"><span>REPORT</span><span>3 BUCKETS</span></div>
+        <div class="report-body">
+          <div class="report-row observation">
+            <strong>Observation</strong>
+            <p><code>ev_014</code> · The application registers an IPC handler for the export command.</p>
+          </div>
+          <div class="report-row inference">
+            <strong>Inference</strong>
+            <p>High confidence · The renderer requests export through that handler. A direct call is the alternative.</p>
+          </div>
+          <div class="report-row unknown">
+            <strong>Unknown</strong>
+            <p>The destination path is computed at runtime. Capture one controlled export to verify it.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Common jobs</h2>
+        <p>Start with a target path and a question. Woodchipper chooses the relevant tools and keeps the supporting evidence.</p>
+      </div>
+      <div class="job-grid">
+        {jobs.map((job) => (
+          <article class="card">
+            <h3><a href={`${base}${job.href}`}>{job.title}</a></h3>
+            <p>{job.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>First run</h2>
+        <p>Docker with Buildx is required during setup. Analysis runs from the project-local Pi harness. It does not add global Claude Code hooks or MCP settings.</p>
+      </div>
+      <div class="install-grid">
+        <div class="step">
+          <h3>1. Build and check</h3>
+          <p>Install the pinned dependencies, build the local harness, and check REA and Ghidra.</p>
+        </div>
+        <div class="step">
+          <h3>2. Open the TUI</h3>
+          <p>Run a triage command. Add a feature or security question after the first summary.</p>
+        </div>
+      </div>
+      <pre class="command"><code><span class="prompt">$</span> git clone https://github.com/stuffbucket/woodchipper.git
+<span class="prompt">$</span> cd woodchipper
+<span class="prompt">$</span> mise trust
+<span class="prompt">$</span> mise run setup
+<span class="prompt">$</span> mise run doctor
+<span class="prompt">$</span> mise run tui
+<span class="prompt">/</span>triage /path/to/target</code></pre>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Documentation</h2>
+        <p>Read the start page first. The examples show requests to enter and the report structure to expect.</p>
+      </div>
+      <div class="doc-grid">
+        {docs.map((doc) => (
+          <article class="card">
+            <h3><a href={`${base}${doc.href}`}>{doc.title}</a></h3>
+            <p>{doc.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Woodchipper · Apache-2.0</span>
+    <a href="https://github.com/stuffbucket/woodchipper">GitHub</a>
+    <a href={`${base}start/`}>Documentation</a>
+  </footer>
+</Plain>

@@ -76,7 +76,7 @@ test('temporary proxy-gap packages stay isolated as Docker-built submodule overr
   const workspaceConfig = fs.readFileSync(path.join(ROOT, 'pnpm-workspace.yaml'), 'utf8')
   assert.match(
     workspaceConfig,
-    /^overrides:\n  # jose v6\.2\.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935\n  jose: link:vendor\/overrides\/packages\/jose\n  # fast-uri v3\.1\.9 source SHA 0def70338a0fa2f12a10c83ae8eafc2139ae9a07\n  fast-uri: link:vendor\/overrides\/packages\/fast-uri\n  # GHSA-mrhx-c7xc-m3w5 is fixed in zod >=4\.6\.6; 4\.6\.7 is mirrored by the proxy\.\n  zod: 4\.6\.7\n\nallowBuilds:\n  frida: true\n$/
+    /^packages:\n  - site\n\noverrides:\n  # jose v6\.2\.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935\n  jose: link:vendor\/overrides\/packages\/jose\n  # fast-uri v3\.1\.9 source SHA 0def70338a0fa2f12a10c83ae8eafc2139ae9a07\n  fast-uri: link:vendor\/overrides\/packages\/fast-uri\n  # GHSA-mrhx-c7xc-m3w5 is fixed in zod >=4\.6\.6; 4\.6\.7 is mirrored by the proxy\.\n  zod: 4\.6\.7\n\nallowBuilds:\n  frida: true\n$/
   )
   assert.ok(
     packageJson.scripts.setup.indexOf('node scripts/build-vendor-overrides.mjs') <
@@ -152,4 +152,30 @@ test('vendored upstream files and manifest are present', () => {
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea-prompts', 'README.md')))
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea', 'contracts', 'toolContracts.ts')))
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea', 'skills', 'reverse-engineer-anything', 'SKILL.md')))
+})
+
+test('documentation site has pinned dependencies, examples, and a Pages workflow', () => {
+  const sitePackage = JSON.parse(fs.readFileSync(path.join(ROOT, 'site', 'package.json'), 'utf8'))
+  assert.equal(sitePackage.dependencies.astro, '7.3.8')
+  assert.equal(sitePackage.dependencies['@astrojs/starlight'], '0.42.6')
+
+  for (const rel of [
+    'site/src/pages/index.astro',
+    'site/src/content/docs/start.md',
+    'site/src/content/docs/what-it-does.md',
+    'site/src/content/docs/examples/triage.md',
+    'site/src/content/docs/examples/feature-trace.md',
+    'site/src/content/docs/examples/clean-room-spec.md',
+    'site/src/content/docs/examples/security-audit.md',
+    'site/src/content/docs/examples/version-diff.md',
+    'site/src/content/docs/examples/firmware.md'
+  ]) {
+    assert.ok(fs.existsSync(path.join(ROOT, rel)), `Missing ${rel}`)
+  }
+
+  const config = fs.readFileSync(path.join(ROOT, 'site', 'astro.config.mjs'), 'utf8')
+  assert.match(config, /"\/woodchipper\/"/)
+  const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'site.yml'), 'utf8')
+  assert.match(workflow, /actions\/configure-pages@[0-9a-f]{40}/)
+  assert.match(workflow, /actions\/deploy-pages@[0-9a-f]{40}/)
 })
