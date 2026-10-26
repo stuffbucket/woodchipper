@@ -1,0 +1,55 @@
+{
+  "source": {
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "1.4.0",
+    "commit": "cae8d69e572e038d584c881efd1818e40571fb7c",
+    "submodule": "vendor/pi"
+  },
+  "output": ".woodchipper/pi",
+  "manifest_replacements": [
+    {
+      "section": "devDependencies",
+      "name": "vitest",
+      "from": "4.1.11",
+      "to": "4.1.12",
+      "expected_matches": 10
+    },
+    {
+      "package": "@earendil-works/pi-coding-agent",
+      "section": "dependencies",
+      "name": "undici",
+      "from": "8.10.2",
+      "to": "8.12.3",
+      "expected_matches": 1
+    }
+  ],
+  "exclude_from_runtime_build": {
+    "devDependencies": [
+      "@anthropic-ai/sandbox-runtime"
+    ],
+    "workspaces": [
+      "packages/coding-agent/examples/extensions/sandbox",
+      "packages/coding-agent/examples/extensions/gondolin"
+    ]
+  },
+  "overrides": {
+    "vite": "8.3.4",
+    "@cloudflare/vitest-plugin": {
+      "zod": "4.6.7"
+    },
+    "miniflare": {
+      "undici": "7.30.1"
+    },
+    "ajv": {
+      "fast-uri": "file:vendor/overrides/packages/fast-uri"
+    }
+  },
+  "expected_lock_versions": {
+    "node_modules/vitest": "4.1.12",
+    "node_modules/vite": "8.3.4",
+    "node_modules/undici": "8.12.3",
+    "node_modules/miniflare/node_modules/undici": "7.30.1",
+    "node_modules/zod": "4.6.7"
+  },
+  "allowed_audit_findings": {}
+}

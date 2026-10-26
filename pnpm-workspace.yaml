@@ -1,2 +1,13 @@
+packages:
+  - site
+
+overrides:
+  # jose v6.2.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935
+  jose: link:vendor/overrides/packages/jose
+  # fast-uri v3.1.9 source SHA 0def70338a0fa2f12a10c83ae8eafc2139ae9a07
+  fast-uri: link:vendor/overrides/packages/fast-uri
+  # GHSA-mrhx-c7xc-m3w5 is fixed in zod >=4.6.6; 4.6.7 is mirrored by the proxy.
+  zod: 4.6.7
+
 allowBuilds:
   frida: true

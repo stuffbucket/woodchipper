@@ -1,0 +1,39 @@
+---
+import "../styles/site.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+    <script is:inline>
+      try {
+        const theme = localStorage.getItem("starlight-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href={base}>Woodchipper</a>
+      <nav aria-label="Site">
+        <a href={`${base}start/`}>Get started</a>
+        <a href={`${base}examples/`}>Examples</a>
+        <a href="https://github.com/stuffbucket/woodchipper">GitHub</a>
+      </nav>
+    </header>
+    <slot />
+  </body>
+</html>

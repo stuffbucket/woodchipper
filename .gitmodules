@@ -1,3 +1,14 @@
+# @earendil-works/pi-coding-agent v1.4.0 @ cae8d69e572e038d584c881efd1818e40571fb7c
 [submodule "vendor/pi"]
 	path = vendor/pi
 	url = https://github.com/earendil-works/pi.git
+# jose v6.2.13 @ 316b7f2cb41b8377515d9cc2e81e03f8e50ee935
+[submodule "vendor/overrides/jose"]
+	path = vendor/overrides/jose
+	url = https://github.com/panva/jose.git
+	shallow = true
+# fast-uri v3.1.9 @ 0def70338a0fa2f12a10c83ae8eafc2139ae9a07
+[submodule "vendor/overrides/fast-uri"]
+	path = vendor/overrides/fast-uri
+	url = https://github.com/fastify/fast-uri.git
+	shallow = true

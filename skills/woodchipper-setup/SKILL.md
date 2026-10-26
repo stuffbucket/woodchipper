@@ -19,8 +19,8 @@ Never blindly re-run `setup` for every error. Different failure modes have disti
 
 | Observed Blocker | Root Cause | Exact Remedy |
 | :--- | :--- | :--- |
-| No REA tools in active session | Skill installed, or MCP not registered / not reconnected | Run `pnpm exec rea doctor --client claude_code --json` (substitute `codex`, `cursor`, `gemini_cli`, `opencode`, etc.). |
-| Registration missing or stale | Client config lacks `rea` server entry | Run read-only plan: `pnpm exec rea setup --client claude_code --dry-run --json`. Show proposed paths and backups, get user approval, then run with `--yes`. Restart client. |
+| No REA tools in active session | Pi extension not loaded, or MCP not connected | Run `pnpm exec rea doctor --provider ghidra --skill --json`, then verify `.pi/settings.json` loads `woodchipper-rea.ts`. Do not use `--client pi`: REA's client check targets user-global `~/.pi/agent/mcp.json`, while Woodchipper registers in-process. |
+| Registration missing or stale | Project-local Pi extension failed to register `rea` | Inspect `.pi/extensions/woodchipper-rea.ts` and restart the Woodchipper session. Do not run client-global `rea setup`; Woodchipper owns registration through `pi.registerMcpServer()`. |
 | Registration aligned, tools still absent | Current session started before registration | Restart/reconnect the agent session. `doctor` checks config files on disk, not live session sockets. |
 | `provider_unavailable` on native/Android/firmware tool | Missing external engine (Ghidra, Hopper, IDA, JADX, Binwalk) | Inspect `binary_session` with `{}` (`result.tool_availability`). Continue with built-in static tools (`inspect_go_binary`, `inspect_rust_binary`, `inspect_elf_notes`, `inspect_pe_resources`, `analyze_javascript_application`) that need no external engine. |
 | `resource_constraint` (`details.resource: "transport"`) | Full Evidence exceeds MCP frame limit | Do NOT rerun the analysis. Call `inspect_analysis_view` with the reported `evidence_reference` (`detail: "summary"` or paged collection), or call `export_evidence_bundle` to disk. |

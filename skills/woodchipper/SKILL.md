@@ -56,7 +56,7 @@ Pick the sub-skill that matches your target artifact or investigation goal:
 
 | Target / Goal | Sub-Skill | First MCP Tool / CLI Command |
 | :--- | :--- | :--- |
-| **Missing tools / Timeouts / Setup** | `woodchipper-setup` | `pnpm exec rea doctor --client claude_code --json` |
+| **Missing tools / Timeouts / Setup** | `woodchipper-setup` | `pnpm exec rea doctor --provider ghidra --skill --json` |
 | **Native ELF / PE / Mach-O / DOS / Raw** | `woodchipper-native` | `open_binary` → `search_strings`, `search_procedures`, `analyze_function` |
 | **Go / Rust / ELF Notes / PE Resources** | `woodchipper-native` | `inspect_go_binary`, `inspect_rust_binary`, `inspect_elf_notes`, `inspect_pe_resources` |
 | **GPU (CUDA/HIP) / GGUF & Safetensors** | `woodchipper-native` | `inspect_gpu_code_objects`, `inspect_model_artifact` |
