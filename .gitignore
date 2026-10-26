@@ -3,3 +3,4 @@ node_modules/
 *.log
 .claude/workflows/.runs/
 .woodchipper/
+vendor/overrides/packages/

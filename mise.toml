@@ -1,9 +1,9 @@
 # Project toolchain and task definitions for woodchipper.
-# Node and pnpm match the rest of ~/github/stuffbucket and package.json's `packageManager`.
+# Node 24 is the general ~/github/stuffbucket baseline; pnpm matches package.json's `packageManager`.
 # Temurin JDK 21 powers headless Ghidra 12.1.4 for REA (`rea-agents@6.7.0`).
 
 [tools]
-node = "22.23.3"
+node = "24.22.1"
 pnpm = "12.11.2"
 python = "3.12.15"
 java = "temurin-21.0.12+101.0.LTS"
@@ -17,11 +17,19 @@ GHIDRA_HEADLESS_MAXMEM = "4G"
 lockfile = true
 
 [tasks.setup]
-description = "Install pinned pnpm dependencies and build/verify the Woodchipper Pi harness"
-run = ["pnpm install --frozen-lockfile", "pnpm run build:harness"]
+description = "Build isolated dependency overrides, install dependencies, and build the project-local vendored Pi harness"
+run = "pnpm run setup"
+
+[tasks."build:overrides"]
+description = "Build temporary jose and fast-uri override packages in Docker"
+run = "pnpm run build:overrides"
+
+[tasks."build:pi"]
+description = "Build audited Pi runtime from the pinned vendor/pi source through the configured proxy"
+run = "pnpm run build:pi"
 
 [tasks."build:harness"]
-description = "Verify and build the customized Woodchipper Pi harness (pass --with-submodule-build to compile vendor/pi)"
+description = "Verify and build the customized Woodchipper Pi harness (pass --with-submodule-build to stage the audited Pi runtime)"
 run = "pnpm run build:harness"
 
 [tasks.tui]
@@ -49,7 +57,7 @@ description = "Run the Woodchipper security & logic mutation test suite"
 run = "pnpm run test:mutate"
 
 [tasks.doctor]
-description = "Run REA environment and external tool readiness check (Claude Code + Pi + Ghidra 12.1.4 + Skill Identity)"
+description = "Run REA environment and external tool readiness check (Ghidra 12.1.4 + Skill Identity)"
 run = "pnpm run doctor"
 
 [tasks.rea]

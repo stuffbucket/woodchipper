@@ -8,7 +8,7 @@
  * - `woodchipper daemon` / `woodchipper peer`: Headless RPC daemon listening on `~/.claude/sessions/<pid>.json` + `/tmp/cc-socks/<pid>.sock` for Claude Code `SendMessage` or `woodchipper-ctl`
  * - `woodchipper rpc`: Standard `pi --mode rpc` with all Woodchipper extensions, skills, and REA MCP wired up
  * - `woodchipper ask <prompt>`: One-shot headless print mode (`-p`)
- * - `woodchipper build-pi`: Builds the vendored `vendor/pi` submodule from source
+ * - `woodchipper build-pi`: Builds an audited runtime from the pinned `vendor/pi` source
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -26,9 +26,23 @@ export function resolvePiCommand() {
 		return { command: process.env.WOODCHIPPER_PI_BIN, prefixArgs: [], source: "WOODCHIPPER_PI_BIN" };
 	}
 
-	const submoduleCli = path.join(PROJECT_ROOT, "vendor", "pi", "packages", "coding-agent", "dist", "cli.js");
+	const auditedCli = path.join(
+		PROJECT_ROOT,
+		".woodchipper",
+		"pi",
+		"packages",
+		"coding-agent",
+		"dist",
+		"bundle",
+		"cli.js",
+	);
+	if (fs.existsSync(auditedCli)) {
+		return { command: process.execPath, prefixArgs: [auditedCli], source: "audited .woodchipper/pi build" };
+	}
+
+	const submoduleCli = path.join(PROJECT_ROOT, "vendor", "pi", "packages", "coding-agent", "dist", "bundle", "cli.js");
 	if (fs.existsSync(submoduleCli)) {
-		return { command: process.execPath, prefixArgs: [submoduleCli], source: "vendor/pi submodule build" };
+		return { command: process.execPath, prefixArgs: [submoduleCli], source: "vendor/pi fallback build" };
 	}
 
 	const managedPi = path.join(os.homedir(), ".pi", "agent", "bin", "pi");
@@ -158,7 +172,7 @@ Usage:
   woodchipper daemon [pi-args...]     Run headless A2A / Claude Code peer daemon (SendMessage / woodchipper-ctl)
   woodchipper rpc [pi-args...]        Run Pi JSONL RPC mode (--mode rpc) with Woodchipper extensions & skills
   woodchipper ask <prompt...>         Run one-shot headless prompt (-p) with Woodchipper extensions & skills
-  woodchipper build-pi                Build the vendored vendor/pi submodule from source
+  woodchipper build-pi                Build audited Pi runtime from pinned vendor/pi source
 `);
 		return;
 	}

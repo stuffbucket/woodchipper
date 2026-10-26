@@ -588,7 +588,7 @@ export function runReaDoctorSummary(projectRoot: string): ReaDoctorSummary {
 	try {
 		const out = execFileSync(
 			"pnpm",
-			["exec", "rea", "doctor", "--client", "claude_code", "--client", "pi", "--provider", "ghidra", "--skill", "--json"],
+			["exec", "rea", "doctor", "--provider", "ghidra", "--skill", "--json"],
 			{
 				cwd: projectRoot,
 				env: doctorEnv,

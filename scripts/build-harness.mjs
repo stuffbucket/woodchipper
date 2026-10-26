@@ -4,18 +4,19 @@
  *
  * Prepares the custom Woodchipper Pi harness in the project directory:
  * 1. Verifies the `vendor/pi` git submodule (`earendil-works/pi`) is initialized.
- * 2. Ensures `.woodchipper/` runtime directory exists with restrictive permissions (`0700`).
- * 3. Verifies `.pi/settings.json`, `.pi/SYSTEM.md`, `.pi/extensions/woodchipper-rea.ts`,
+ * 2. Verifies the isolated, Docker-built dependency override packages are present.
+ * 3. Ensures `.woodchipper/` runtime directory exists with restrictive permissions (`0700`).
+ * 4. Verifies `.pi/settings.json`, `.pi/SYSTEM.md`, `.pi/extensions/woodchipper-rea.ts`,
  *    `.pi/extensions/woodchipper-peer.ts`, `bin/woodchipper.mjs`, and `scripts/woodchipper-ctl.mjs`.
- * 4. Optionally builds `vendor/pi` from source when `--with-submodule-build` is passed
- *    (using `npm ci --ignore-scripts`).
+ * 5. Optionally stages `vendor/pi` into the ignored `.woodchipper/pi` build tree, applies
+ *    exact proxy-available audit fixes, and builds it when `--with-submodule-build` is passed.
  */
 
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePiCommand } from "../bin/woodchipper.mjs";
+import { buildPiOverlay } from "./build-pi-overlay.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -23,6 +24,10 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 const REQUIRED_PATHS = [
 	"vendor/pi/package.json",
 	"vendor/pi/packages/coding-agent/package.json",
+	"vendor/overrides/manifest.json",
+	"vendor/overrides/pi-audit.json",
+	"vendor/overrides/packages/jose/dist/webapi/index.js",
+	"vendor/overrides/packages/fast-uri/index.js",
 	".pi/settings.json",
 	".pi/SYSTEM.md",
 	".pi/extensions/woodchipper-rea.ts",
@@ -59,16 +64,20 @@ function main() {
 	}
 
 	// Ensure executable permissions on CLI entrypoints
-	for (const scriptRel of ["bin/woodchipper.mjs", "scripts/woodchipper-ctl.mjs", "scripts/build-harness.mjs"]) {
+	for (const scriptRel of [
+		"bin/woodchipper.mjs",
+		"scripts/woodchipper-ctl.mjs",
+		"scripts/build-harness.mjs",
+		"scripts/build-vendor-overrides.mjs",
+		"scripts/build-pi-overlay.mjs",
+	]) {
 		fs.chmodSync(path.join(PROJECT_ROOT, scriptRel), 0o755);
 	}
 
-	// 3. Optional source build of vendor/pi submodule
+	// 3. Optional clean-room build copied from the immutable vendor/pi submodule
 	if (withSubmoduleBuild) {
-		console.log("\nBuilding vendor/pi submodule from source (--ignore-scripts)...");
-		const piDir = path.join(PROJECT_ROOT, "vendor", "pi");
-		execFileSync("npm", ["ci", "--ignore-scripts"], { cwd: piDir, stdio: "inherit" });
-		execFileSync("npm", ["run", "build"], { cwd: piDir, stdio: "inherit" });
+		console.log("\nBuilding the isolated Pi dependency overlay...");
+		buildPiOverlay();
 	}
 
 	const piResolved = resolvePiCommand();

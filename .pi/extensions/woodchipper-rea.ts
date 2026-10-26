@@ -272,7 +272,7 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 				"Reverse Engineer Anything (REA) MCP server providing static, dynamic, firmware, JS/Electron, mobile, and reconstruction tools.",
 		});
 	} catch {
-		// Ignore if 'rea' is already configured in .mcp.json or registered by another handler
+		// Ignore if another Pi extension already registered the project-local 'rea' server.
 	}
 
 	// =========================================================================
