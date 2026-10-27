@@ -486,11 +486,10 @@ test("woodchipper_triage, woodchipper_playbook, slash commands, and before_agent
 		});
 		const statusMsg = state.sentMessages.find((m) => m.message.customType === "woodchipper-status");
 		assert.ok(statusMsg, "Expected /status to emit woodchipper-status message");
-		assert.match(statusMsg.message.content, /Where Woodchipper Is Running/);
-		assert.match(statusMsg.message.content, /Where the Model Is Pulled From/);
-		assert.match(statusMsg.message.content, /Current Work & Investigation Purpose/);
-		assert.match(statusMsg.message.content, /Where Output Goes/);
-		assert.match(statusMsg.message.content, /Important Input & Evidence State/);
+		assert.match(statusMsg.message.content, /SESSION & RUNTIME/);
+		assert.match(statusMsg.message.content, /ACTIVE MODEL & PROVIDER/);
+		assert.match(statusMsg.message.content, /Working Dir/);
+		assert.match(statusMsg.message.content, /Output Dir/);
 		assert.match(statusMsg.message.content, /12,400 \/ 200,000 tokens/);
 
 		// /exit command invokes ctx.shutdown()

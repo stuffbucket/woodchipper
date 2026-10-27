@@ -22,7 +22,9 @@ import {
 	isModelPresentOnDisk,
 	resolveGlinerRunnerCommand,
 	renderWoodchipperHeaderLines,
+	renderWoodchipperStatusCardLines,
 	type UserExpertiseLevel,
+	type WoodchipperStatusInput,
 } from "./lib/gliner-classifier.ts";
 import {
 	DEFAULT_MAXIMAL_MODEL,
@@ -1113,8 +1115,23 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	});
 
 	// =========================================================================
-	// 5. Startup Orientation Header & System Prompt Enrichment
+	// 5. Custom Message Renderers, Startup Header & System Prompt Enrichment
 	// =========================================================================
+	if (typeof pi.registerMessageRenderer === "function") {
+		pi.registerMessageRenderer<WoodchipperStatusInput>("woodchipper-status", (message, _options, theme) => {
+			const details = message.details;
+			if (!details || typeof details !== "object" || !("activeModelId" in details)) {
+				return undefined;
+			}
+			return {
+				render(width: number): string[] {
+					return renderWoodchipperStatusCardLines(width, details, theme);
+				},
+				invalidate() {},
+			};
+		});
+	}
+
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx?.hasUI) return;
 
