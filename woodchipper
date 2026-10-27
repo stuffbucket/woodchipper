@@ -14,6 +14,9 @@
 set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export PI_SKIP_VERSION_CHECK="1"
+export PI_CODING_AGENT_DIR="$ROOT_DIR/workspaces/.pi-agent"
+mkdir -p "$PI_CODING_AGENT_DIR"
 
 if command -v mise >/dev/null 2>&1; then
 	mise trust --quiet "$ROOT_DIR/mise.toml" >/dev/null 2>&1 || true

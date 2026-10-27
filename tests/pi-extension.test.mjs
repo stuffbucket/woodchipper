@@ -20,6 +20,7 @@ import {
 	defaultGlinerModelsDir,
 	ensureGlinerModelInstalled,
 	formatWoodchipperOrientationBanner,
+	renderWoodchipperHeaderLines,
 } from "../.pi/extensions/lib/gliner-classifier.ts";
 import {
 	PLAYBOOK_CATALOG,
@@ -624,17 +625,33 @@ test("workspaces isolate findings per target and never leak into global XDG or ~
 		const modelsDir = defaultGlinerModelsDir({}, tmpRoot);
 		assert.equal(modelsDir, path.join(tmpRoot, "vendor", "gliner-runner", "models"));
 
-		// 5. Verify REA XDG dirs are isolated inside workspaces/.rea-runtime
+		// 5. Verify REA XDG dirs, PI_CODING_AGENT_DIR, and PI_SKIP_VERSION_CHECK are isolated
 		const reaEnv = resolveReaProviderEnv({}, tmpRoot);
 		assert.equal(reaEnv.XDG_CACHE_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "cache"));
 		assert.equal(reaEnv.XDG_DATA_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "data"));
 		assert.equal(reaEnv.XDG_STATE_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "state"));
+		assert.equal(reaEnv.PI_CODING_AGENT_DIR, path.join(tmpRoot, "workspaces", ".pi-agent"));
+		assert.equal(reaEnv.PI_SKIP_VERSION_CHECK, "1");
 
-		// 6. Verify Pi CLI args explicitly pass --session-dir inside workspaces/<slug>/sessions
+		// 6. Verify Pi CLI args explicitly pass --no-skills, --no-prompt-templates, and --session-dir
 		const piArgs = buildWoodchipperPiArgs([], "tui");
+		assert.ok(piArgs.includes("--no-skills"), "Expected --no-skills to block global ~/.agents/skills");
+		assert.ok(piArgs.includes("--no-prompt-templates"), "Expected --no-prompt-templates to block global prompts");
 		const sessionDirIdx = piArgs.indexOf("--session-dir");
 		assert.ok(sessionDirIdx !== -1, "Expected --session-dir to be passed to Pi");
 		assert.match(piArgs[sessionDirIdx + 1], /workspaces\/.*\/sessions$/);
+
+		// 7. Verify custom TUI header box renders within terminal width
+		const headerLines = renderWoodchipperHeaderLines(90, {
+			getActiveModel: () => "maximal/claude-sonnet-5-5-20260301",
+			getWorkspaceSlug: () => "default",
+			getReportPath: () => path.join(tmpRoot, "workspaces", "default", "REPORT.md"),
+		});
+		assert.ok(headerLines.length >= 8);
+		assert.ok(headerLines.some((l) => l.includes("WOODCHIPPER")));
+		for (const line of headerLines) {
+			assert.ok(line.length <= 90, `Header line exceeded width 90: ${line.length}`);
+		}
 	} finally {
 		fs.rmSync(tmpRoot, { recursive: true, force: true });
 	}

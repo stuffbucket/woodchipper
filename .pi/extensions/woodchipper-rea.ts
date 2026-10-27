@@ -17,6 +17,7 @@ import {
 	ensureGlinerModelInstalled,
 	formatWoodchipperOrientationBanner,
 	heuristicClassifyIntent,
+	renderWoodchipperHeaderLines,
 } from "./lib/gliner-classifier.ts";
 import { Type } from "./lib/schema.ts";
 import {
@@ -1008,21 +1009,30 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	});
 
 	// =========================================================================
-	// 5. Startup Orientation & System Prompt Enrichment
+	// 5. Startup Orientation Header & System Prompt Enrichment
 	// =========================================================================
-	pi.on("session_start", async (event, ctx) => {
-		if (event.reason === "startup" && ctx?.hasUI) {
-			const banner = formatWoodchipperOrientationBanner({
-				activeModel: ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
-			});
-			pi.sendMessage(
-				{
-					customType: "woodchipper-welcome",
-					content: banner,
-					display: true,
+	pi.on("session_start", async (_event, ctx) => {
+		if (!ctx?.hasUI) return;
+
+		if (typeof ctx.ui?.setTitle === "function") {
+			ctx.ui.setTitle("Woodchipper — Reverse-Engineering Appliance");
+		}
+		if (typeof ctx.ui?.setHeader === "function") {
+			ctx.ui.setHeader((_tui, theme) => ({
+				render(width: number): string[] {
+					return renderWoodchipperHeaderLines(
+						width,
+						{
+							getActiveModel: () =>
+								ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : "maximal/claude-sonnet-5-5-20260301",
+							getWorkspaceSlug: () => ledger.getWorkspaceSlug(),
+							getReportPath: () => ledger.getReportPath(),
+						},
+						theme,
+					);
 				},
-				{ triggerTurn: false },
-			);
+				invalidate() {},
+			}));
 		}
 	});
 

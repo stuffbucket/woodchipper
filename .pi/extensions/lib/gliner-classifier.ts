@@ -972,3 +972,59 @@ export function formatWoodchipperOrientationBanner(params: {
 		`_Active Model: \`${params.activeModel ?? "maximal/claude-sonnet-5-5-20260301"}\` (auto-failover enabled) • GLiNER \`decide-340m\` Intent Router: \`${params.glinerReady ? "ready" : "active (auto-pull on demand)"}\`_`,
 	].join("\n");
 }
+
+/**
+ * Render width-safe lines for the custom Woodchipper TUI Header (`ctx.ui.setHeader`).
+ */
+export function renderWoodchipperHeaderLines(
+	width: number,
+	params: {
+		getActiveModel: () => string;
+		getWorkspaceSlug: () => string;
+		getReportPath: () => string;
+	},
+	theme?: {
+		fg?: (color: string, text: string) => string;
+		bold?: (text: string) => string;
+	},
+): string[] {
+	const safeWidth = Math.max(40, width || 80);
+	const innerWidth = Math.max(36, Math.min(safeWidth - 4, 96));
+
+	const padOrClip = (plain: string): string => {
+		const clipped = plain.length > innerWidth ? `${plain.slice(0, innerWidth - 1)}…` : plain;
+		return `${clipped}${" ".repeat(Math.max(0, innerWidth - clipped.length))}`;
+	};
+
+	const fg = (color: string, text: string) => (theme?.fg ? theme.fg(color, text) : text);
+	const bold = (text: string) => (theme?.bold ? theme.bold(text) : text);
+
+	const topTitle = " WOODCHIPPER • Reverse-Engineering Appliance ";
+	const topDashCount = Math.max(2, innerWidth + 2 - topTitle.length);
+	const topBorder = fg("accent", `╭─${bold(topTitle)}${"─".repeat(topDashCount - 1)}╮`);
+	const bottomBorder = fg("accent", `╰${"─".repeat(innerWidth + 2)}╯`);
+
+	const boxRow = (plainText: string, tone?: "dim" | "accent" | "muted") => {
+		const content = padOrClip(plainText);
+		const styled = tone ? fg(tone, content) : content;
+		return `${fg("accent", "│")} ${styled} ${fg("accent", "│")}`;
+	};
+
+	const modelLabel = params.getActiveModel();
+	const wsSlug = params.getWorkspaceSlug();
+	const reportRel = `workspaces/${wsSlug}/REPORT.md`;
+
+	return [
+		topBorder,
+		boxRow(`Model: ${modelLabel} (auto-failover)  •  Engine: REA 6.7.0 (207 tools) + GLiNER decide-340m`),
+		boxRow(`Output: ${reportRel}  (isolated per target • never commingled)`, "muted"),
+		boxRow(""),
+		boxRow("Drop any file path or ask in plain English — no reverse-engineering jargon required:"),
+		boxRow('  • "What is /path/to/app and does it phone home?"', "dim"),
+		boxRow('  • "How does the license check or export button work in /path/to/binary?"', "dim"),
+		boxRow('  • "Audit /path/to/driver.sys for unsafe inputs or command execution sinks"', "dim"),
+		boxRow(""),
+		boxRow("Commands: /start <path> • /triage • /trace • /audit • /clone-spec • /ledger • /maximal • /doctor", "muted"),
+		bottomBorder,
+	];
+}

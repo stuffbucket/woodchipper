@@ -110,6 +110,8 @@ export function buildWoodchipperPiArgs(userArgs, modeOverride) {
 
 	const baseArgs = [
 		"--approve",
+		"--no-skills",
+		"--no-prompt-templates",
 		"--session-dir",
 		sessionDir,
 		"--extension",
@@ -165,7 +167,7 @@ function runDaemonMode(extraArgs) {
 		cwd: PROJECT_ROOT,
 		stdio: ["pipe", "pipe", "inherit"],
 		env: {
-			...resolveReaProviderEnv(),
+			...resolveReaProviderEnv(process.env, PROJECT_ROOT),
 			WOODCHIPPER_PEER_NAME: process.env.WOODCHIPPER_PEER_NAME || "woodchipper",
 		},
 	});

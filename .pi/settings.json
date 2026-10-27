@@ -3,6 +3,7 @@
   "defaultProvider": "maximal",
   "defaultModel": "claude-sonnet-5-5-20260301",
   "defaultThinkingLevel": "high",
+  "quietStartup": true,
   "defaultTools": [
     "read",
     "bash",
