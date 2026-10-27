@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { deriveWorkspaceSlug } from "../.pi/extensions/lib/evidence-ledger.ts";
 import { resolveReaProviderEnv } from "../.pi/extensions/lib/triage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,8 +63,20 @@ export function resolvePiCommand() {
  * (Pi deduplicates extension and skill paths via `path.resolve`).
  */
 export function buildWoodchipperPiArgs(userArgs, modeOverride) {
+	const workspaceSlug = deriveWorkspaceSlug(process.env.WOODCHIPPER_WORKSPACE || "default");
+	const sessionDir = path.join(PROJECT_ROOT, "workspaces", workspaceSlug, "sessions");
+	try {
+		fs.mkdirSync(sessionDir, { recursive: true });
+	} catch {
+		// Ignore on read-only filesystems
+	}
+
 	const baseArgs = [
 		"--approve",
+		"--session-dir",
+		sessionDir,
+		"--extension",
+		path.join(PROJECT_ROOT, ".pi", "extensions", "woodchipper-maximal.ts"),
 		"--extension",
 		path.join(PROJECT_ROOT, ".pi", "extensions", "woodchipper-rea.ts"),
 		"--extension",
@@ -92,7 +105,11 @@ export function buildWoodchipperPiArgs(userArgs, modeOverride) {
 		baseArgs.push("--print");
 	}
 
-	return [...baseArgs, ...userArgs];
+	const normalizedUserArgs = userArgs.map((arg) =>
+		arg === "--no-peer" || arg === "--no-maximal" ? `${arg}=true` : arg,
+	);
+
+	return [...baseArgs, ...normalizedUserArgs];
 }
 
 function attachChildErrorHandler(child, command) {

@@ -43,18 +43,27 @@ running an investigation.
 mise run tui
 ```
 
-The TUI accepts normal requests and these direct commands:
+You can also verify the entire harness end-to-end against the bundled sample Electron application in two seconds:
+
+```sh
+mise run smoke
+```
+
+The TUI displays an orientation banner on startup and accepts plain-English questions as well as direct slash commands:
 
 ```text
+/start /path/to/target
 /triage /path/to/target
 /trace /path/to/target "feature or behavior"
 /clone-spec /path/to/target
 /audit /path/to/target
+/gliner [status|ensure-model|classify <text>]
+/maximal [status|models|refresh|use <model-id>]
 /ledger
 /doctor
 ```
 
-Start with `/triage` if you do not know which analysis path applies.
+Start with `/start /path/to/target` or simply ask a plain-English question (for example, `"What is /path/to/target and does it phone home?"`). Every target automatically receives its own isolated workspace under `workspaces/<target-slug>/` containing `REPORT.md`, `TRIAGE_MAP.md`, `evidence-ledger.json`, and `sessions/`.
 
 ## First triage
 

@@ -14,9 +14,8 @@ recorded network packets (`.pcap`/`.pcapng`), and logic-analyzer captures.
 
 ## 1. Firmware Images & Headerless MCU Blobs
 
-1. **Entropy & Region Triage:**
-   - Run `inspect_byte_entropy` on the image to spot compressed/encrypted partitions vs. code/strings.
-   - Run `inspect_firmware_regions` (uses Binwalk/Unblob on Linux) to identify partition tables, SquashFS/JFFS2/UBI/cramfs filesystems, bootloaders, and kernels.
+1. **Region & Layout Triage:**
+   - Run `inspect_firmware_regions` (uses Binwalk/Unblob) to identify partition tables, SquashFS/JFFS2/UBI/cramfs filesystems, bootloaders, and kernels, and `inspect_binary_layout` (`detail: "summary"`) for container/section metadata.
 2. **Controlled Extraction:**
    - Call `extract_firmware` with a caller-selected **new absolute output directory** to unpack filesystems and hand off extracted ELF/raw binaries to `woodchipper-native`.
 3. **Headerless Raw Firmware / MCU Dumps:**

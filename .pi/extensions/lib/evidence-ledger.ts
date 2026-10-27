@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -39,6 +40,8 @@ export interface UnknownEntry {
 
 export interface EvidenceLedgerData {
 	version: 1;
+	workspaceSlug: string;
+	targetPath?: string;
 	updatedAt: string;
 	trackedEvidenceIds: Record<string, TrackedEvidenceId>;
 	observations: ObservationEntry[];
@@ -46,9 +49,31 @@ export interface EvidenceLedgerData {
 	unknowns: UnknownEntry[];
 }
 
-function createEmptyLedger(): EvidenceLedgerData {
+/**
+ * Derive a human-readable, collision-resistant workspace directory name for a target path
+ * so separate reverse-engineering projects never commingle state or leak into global XDG directories.
+ */
+export function deriveWorkspaceSlug(targetPathOrName?: string): string {
+	const raw = (targetPathOrName ?? "").trim();
+	if (!raw || raw === "default") {
+		return "default";
+	}
+	const resolved = path.resolve(raw);
+	const base = path
+		.basename(resolved)
+		.toLowerCase()
+		.replace(/[^a-z0-9._-]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.slice(0, 40) || "target";
+	const shortHash = crypto.createHash("sha256").update(resolved).digest("hex").slice(0, 8);
+	return `${base}-${shortHash}`;
+}
+
+function createEmptyLedger(workspaceSlug: string, targetPath?: string): EvidenceLedgerData {
 	return {
 		version: 1,
+		workspaceSlug,
+		...(targetPath ? { targetPath } : {}),
 		updatedAt: new Date().toISOString(),
 		trackedEvidenceIds: {},
 		observations: [],
@@ -73,16 +98,93 @@ function nextMonotonicId(prefix: string, existingIds: string[]): string {
 }
 
 export class EvidenceLedger {
+	private projectRoot: string;
+	private workspaceSlug: string;
+	private targetPath?: string;
+	private workspaceDir: string;
 	private ledgerPath: string;
+	private reportPath: string;
+	private triageMapPath: string;
 	private data: EvidenceLedgerData;
 
-	constructor(projectRoot: string) {
-		this.ledgerPath = path.join(projectRoot, ".woodchipper", "evidence-ledger.json");
+	constructor(projectRoot: string, initialTargetOrWorkspace?: string) {
+		this.projectRoot = projectRoot;
+		const envWorkspace = process.env.WOODCHIPPER_WORKSPACE?.trim();
+		const initial = initialTargetOrWorkspace ?? envWorkspace ?? "default";
+		this.workspaceSlug = initial === "default" ? "default" : deriveWorkspaceSlug(initial);
+		this.targetPath = initial !== "default" ? path.resolve(projectRoot, initial) : undefined;
+		this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
+		this.ledgerPath = path.join(this.workspaceDir, "evidence-ledger.json");
+		this.reportPath = path.join(this.workspaceDir, "REPORT.md");
+		this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
 		this.data = this.loadFromDisk();
+	}
+
+	/**
+	 * Switch this session's active ledger to an isolated per-target workspace directory
+	 * (`workspaces/<target-slug>/`) so separate projects never commingle findings.
+	 */
+	public setTargetWorkspace(targetPath: string): {
+		workspaceSlug: string;
+		workspaceDir: string;
+		reportPath: string;
+		triageMapPath: string;
+		ledgerPath: string;
+	} {
+		const resolved = path.resolve(this.projectRoot, targetPath);
+		const nextSlug = deriveWorkspaceSlug(resolved);
+		this.workspaceSlug = nextSlug;
+		this.targetPath = resolved;
+		this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
+		this.ledgerPath = path.join(this.workspaceDir, "evidence-ledger.json");
+		this.reportPath = path.join(this.workspaceDir, "REPORT.md");
+		this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
+		this.data = this.loadFromDisk();
+		this.data.targetPath = resolved;
+		try {
+			const workspacesRoot = path.join(this.projectRoot, "workspaces");
+			fs.mkdirSync(workspacesRoot, { recursive: true });
+			fs.writeFileSync(path.join(workspacesRoot, "ACTIVE_WORKSPACE"), `${this.workspaceSlug}\n`, "utf8");
+		} catch {
+			// Ignore on read-only filesystem
+		}
+		return {
+			workspaceSlug: this.workspaceSlug,
+			workspaceDir: this.workspaceDir,
+			reportPath: this.reportPath,
+			triageMapPath: this.triageMapPath,
+			ledgerPath: this.ledgerPath,
+		};
+	}
+
+	public getWorkspaceSlug(): string {
+		return this.workspaceSlug;
+	}
+
+	public getWorkspaceDir(): string {
+		return this.workspaceDir;
 	}
 
 	public getLedgerPath(): string {
 		return this.ledgerPath;
+	}
+
+	public getReportPath(): string {
+		return this.reportPath;
+	}
+
+	public getTriageMapPath(): string {
+		return this.triageMapPath;
+	}
+
+	public writeTriageMap(markdownContent: string): string {
+		try {
+			fs.mkdirSync(this.workspaceDir, { recursive: true });
+			fs.writeFileSync(this.triageMapPath, `${markdownContent.trimEnd()}\n`, "utf8");
+		} catch {
+			// Ignore on read-only filesystem
+		}
+		return this.triageMapPath;
 	}
 
 	private loadFromDisk(): EvidenceLedgerData {
@@ -92,6 +194,8 @@ export class EvidenceLedger {
 				const parsed = JSON.parse(raw) as Partial<EvidenceLedgerData>;
 				return {
 					version: 1,
+					workspaceSlug: this.workspaceSlug,
+					targetPath: typeof parsed.targetPath === "string" ? parsed.targetPath : this.targetPath,
 					updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
 					trackedEvidenceIds:
 						parsed.trackedEvidenceIds && typeof parsed.trackedEvidenceIds === "object"
@@ -112,23 +216,48 @@ export class EvidenceLedger {
 				// Ignore
 			}
 		}
-		return createEmptyLedger();
+		return createEmptyLedger(this.workspaceSlug, this.targetPath);
 	}
 
 	public saveToDisk(): void {
 		try {
 			this.data.updatedAt = new Date().toISOString();
-			const dir = path.dirname(this.ledgerPath);
-			fs.mkdirSync(dir, { recursive: true });
+			this.data.workspaceSlug = this.workspaceSlug;
+			if (this.targetPath) {
+				this.data.targetPath = this.targetPath;
+			}
+			fs.mkdirSync(this.workspaceDir, { recursive: true });
 			const tmpPath = `${this.ledgerPath}.${process.pid}.tmp`;
 			fs.writeFileSync(tmpPath, `${JSON.stringify(this.data, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
 			fs.renameSync(tmpPath, this.ledgerPath);
+
+			// Always write the visible human-readable Markdown report inside `workspaces/<target-slug>/REPORT.md`
+			const tmpReport = `${this.reportPath}.${process.pid}.tmp`;
+			fs.writeFileSync(tmpReport, `${this.formatMarkdownReport()}\n`, { encoding: "utf8" });
+			fs.renameSync(tmpReport, this.reportPath);
 		} catch {
 			// Ignore write failures on read-only filesystems; keep in-memory copy intact
 		}
 	}
 
 	public reload(): EvidenceLedgerData {
+		if (this.workspaceSlug === "default") {
+			try {
+				const activePointer = path.join(this.projectRoot, "workspaces", "ACTIVE_WORKSPACE");
+				if (fs.existsSync(activePointer)) {
+					const pointedSlug = fs.readFileSync(activePointer, "utf8").trim();
+					if (pointedSlug && pointedSlug !== "default" && /^[a-z0-9._-]+$/i.test(pointedSlug)) {
+						this.workspaceSlug = pointedSlug;
+						this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
+						this.ledgerPath = path.join(this.workspaceDir, "evidence-ledger.json");
+						this.reportPath = path.join(this.workspaceDir, "REPORT.md");
+						this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
+					}
+				}
+			} catch {
+				// Ignore
+			}
+		}
 		this.data = this.loadFromDisk();
 		return this.data;
 	}
@@ -250,7 +379,7 @@ export class EvidenceLedger {
 			let match = regex.exec(block);
 			while (match !== null) {
 				const id = match[0];
-				if (!discovered.has(id)) {
+				if (id !== "ev_unspecified" && !discovered.has(id)) {
 					discovered.set(id, {
 						id,
 						parentId: defaultParent && defaultParent !== id ? defaultParent : undefined,
@@ -295,7 +424,7 @@ export class EvidenceLedger {
 			recordedAt,
 		};
 		this.data.observations.push(entry);
-		if (entry.evidenceId.startsWith("ev_")) {
+		if (entry.evidenceId.startsWith("ev_") && entry.evidenceId !== "ev_unspecified") {
 			this.upsertEvidenceIdInMemory(entry.evidenceId, input.toolName ?? "woodchipper_ledger");
 		}
 		this.saveToDisk();
@@ -357,16 +486,19 @@ export class EvidenceLedger {
 	}
 
 	public clear(): void {
-		this.data = createEmptyLedger();
+		this.data = createEmptyLedger(this.workspaceSlug, this.targetPath);
 		this.saveToDisk();
 	}
 
 	public formatMarkdownReport(): string {
 		const counts = this.getCounts();
 		const lines: string[] = [
-			"# Woodchipper Three-Bucket Evidence Ledger",
+			`# Woodchipper Investigation Report (\`${this.workspaceSlug}\`)`,
 			"",
-			`- **Ledger File:** \`${this.ledgerPath}\``,
+			...(this.data.targetPath ? [`- **Target Path:** \`${this.data.targetPath}\``] : []),
+			`- **Workspace Directory:** \`${this.workspaceDir}\``,
+			`- **Report File:** \`${this.reportPath}\``,
+			`- **Ledger JSON:** \`${this.ledgerPath}\``,
 			`- **Updated At:** \`${this.data.updatedAt}\``,
 			`- **Tracked Evidence IDs:** ${counts.evidenceIds} | **Observations:** ${counts.observations} | **Inferences:** ${counts.inferences} | **Unknowns:** ${counts.unresolvedUnknowns} open (${counts.unknowns} total)`,
 			"",

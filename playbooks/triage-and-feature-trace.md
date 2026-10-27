@@ -13,10 +13,10 @@ Derived from `REA-Prompts` (Sections 1, 2, 3, 11, and Wildcard) and `morluto/rea
 ### Agent Execution Sequence
 
 1. **Identify Container & Fast Metadata (No Disassembler Wait):**
-   - Directory: `inspect_desktop_application` (`detail: "summary"`)
-   - Electron / JS: `analyze_javascript_application` (`detail: "summary"`)
-   - Go / Rust / ELF / PE / Mach-O: `inspect_go_binary`, `inspect_rust_binary`, `inspect_elf_notes`, `inspect_binary_layout`, `inspect_pe_resources`, `inspect_macho` (`detail: "summary"`), `inspect_byte_entropy`
-   - Apple `.app` / Archive: `open_bundle_resources` + `inspect_plist`, or `open_binary` + `inspect_artifact` (`detail: "summary"`)
+   - Directory / Bundle: `open_binary` + `inspect_artifact` (`detail: "summary"`)
+   - Electron / JS: `analyze_javascript_application` (`input_path`, `detail: "summary"`)
+   - Go / Rust / ELF / PE / Mach-O: `inspect_go_binary`, `inspect_rust_binary`, `inspect_binary_layout` (`detail: "summary"`), `inspect_with_objdump`, `inspect_pe_resources`, or `open_binary` + `inspect_macho` (`detail: "summary"`)
+   - Apple `.app` / Archive: `inspect_plist` (`path`), or `open_binary` + `inspect_artifact` (`detail: "summary"`) + `project_apple_application_graph`
 2. **Group Capabilities by Evidence:**
    - Group imports, strings, and modules by capability: **Network**, **Filesystem/DB**, **IPC/RPC**, **Crypto/Auth**, **UI/Entrypoints**.
    - Flag high-entropy sections, packing indicators, or disabled Electron fuses (`inspect_electron_fuses`).

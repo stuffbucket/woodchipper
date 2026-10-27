@@ -43,11 +43,12 @@ Understanding what is human-driven vs. agent-driven prevents wasted tokens and c
 3. **Static Before Dynamic:** Do not execute targets, launch browsers/Electron, or attach Frida/LLDB
    unless static evidence cannot answer the question and runtime execution is within scope.
 4. **Target-Free vs. Active-Session Tools:** Only call `open_binary` for native disassemblers or
-   archive inventories that operate on the active session target. Target-free tools
-   (`analyze_javascript_application`, `inspect_go_binary`, `inspect_rust_binary`,
-   `inspect_elf_notes`, `inspect_pe_resources`, `inspect_sqlite_database`, `inspect_android_package`,
+   active-session container/bundle inspectors (`inspect_macho`, `inspect_artifact`,
+   `decode_interface_builder`, `inspect_asset_catalog`). Target-free tools
+   (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_go_binary`,
+   `inspect_rust_binary`, `inspect_pe_resources`, `inspect_sqlite_database`, `inspect_android_package`,
    `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_evm_interface`,
-   `inspect_model_artifact`, `inspect_il2cpp_metadata`) take an explicit path directly—do NOT call
+   `inspect_firmware_regions`, `inspect_plist`) take an explicit path directly—do NOT call
    `open_binary` for them.
 
 ## Target Routing Table
@@ -57,19 +58,19 @@ Pick the sub-skill that matches your target artifact or investigation goal:
 | Target / Goal | Sub-Skill | First MCP Tool / CLI Command |
 | :--- | :--- | :--- |
 | **Missing tools / Timeouts / Setup** | `woodchipper-setup` | `pnpm exec rea doctor --provider ghidra --skill --json` |
-| **Native ELF / PE / Mach-O / DOS / Raw** | `woodchipper-native` | `open_binary` → `search_strings`, `search_procedures`, `analyze_function` |
-| **Go / Rust / ELF Notes / PE Resources** | `woodchipper-native` | `inspect_go_binary`, `inspect_rust_binary`, `inspect_elf_notes`, `inspect_pe_resources` |
-| **GPU (CUDA/HIP) / GGUF & Safetensors** | `woodchipper-native` | `inspect_gpu_code_objects`, `inspect_model_artifact` |
+| **Native ELF / PE / Mach-O / DOS / Raw** | `woodchipper-native` | `inspect_binary_layout` → `open_binary` → `search_strings`, `search_procedures`, `analyze_function` |
+| **Go / Rust / ELF Layout / PE Resources** | `woodchipper-native` | `inspect_go_binary`, `inspect_rust_binary`, `inspect_binary_layout`, `inspect_pe_resources` |
+| **GPU (CUDA/HIP) / GGUF & Safetensors** | `woodchipper-native` | `inspect_binary_layout`, `inspect_with_objdump`, `open_binary` + `inspect_artifact` |
 | **Electron / ASAR / JS Bundles / HAR / SAZ** | `woodchipper-js-web` | `analyze_javascript_application` (`detail: "summary"`), `inspect_web_network_capture` |
 | **Android APK / JADX / Apktool / ADB / JEB** | `woodchipper-mobile-managed` | `inspect_android_package`, `decode_android_resources`, `list_adb_devices` |
-| **Flutter / Unity IL2CPP / Godot PCK** | `woodchipper-mobile-managed` | `identify_flutter_build`, `inspect_il2cpp_metadata`, `open_binary` + `inspect_artifact` |
+| **Flutter / Unity IL2CPP / Godot PCK** | `woodchipper-mobile-managed` | `identify_flutter_build`, `inspect_dart_aot`, `open_binary` + `inspect_artifact` |
 | **.NET Managed PE/CLI & NativeAOT** | `woodchipper-mobile-managed` | `inspect_managed_artifact`, `inspect_managed_members` |
-| **Apple `.app` / IPA / DMG / Plist / NIB / CAR** | `woodchipper-mobile-managed` | `open_bundle_resources` → `inspect_plist`, `decode_interface_builder`, `inspect_asset_catalog` |
-| **Firmware / Binwalk / Unblob / Entropy** | `woodchipper-firmware-signals` | `inspect_byte_entropy`, `inspect_firmware_regions`, `extract_firmware` |
+| **Apple `.app` / IPA / DMG / Plist / NIB / CAR** | `woodchipper-mobile-managed` | `inspect_plist`, `open_binary` → `inspect_artifact`, `decode_interface_builder`, `inspect_asset_catalog` |
+| **Firmware / Binwalk / Unblob / Regions** | `woodchipper-firmware-signals` | `inspect_firmware_regions`, `extract_firmware`, `inspect_binary_layout` |
 | **WASM / EVM Bytecode / SQLite / PCAP / Logic Signals** | `woodchipper-firmware-signals` | `inspect_wasm_artifact`, `inspect_evm_interface`, `inspect_sqlite_database`, `inspect_pcap_capture`, `decode_signal_recording` |
 | **Live Browser / Electron / Frida / GDB / LLDB / Process** | `woodchipper-runtime` | `list_browser_targets`, `list_electron_targets`, `capture_process_scenario`, `start_frida_session` |
 | **Clean-Room Spec / Feature Clone / WASM Port** | `woodchipper-reconstruction` | `build_reconstruction_obligation_ledger`, `verify_reconstruction`, `compare_functions` |
-| **Vulnerability / Kernel IOCTL / Crash / Version Diff** | `woodchipper-audit` | `inspect_recorded_crash`, `compare_application_versions`, `compare_artifacts`, `audit_residual_unknowns` |
+| **Vulnerability / Kernel IOCTL / Crash / Version Diff** | `woodchipper-audit` | `inspect_recorded_crash`, `compare_application_versions`, `compare_artifacts`, `list_unknowns` |
 
 ## Playbooks & Deterministic Workflows
 

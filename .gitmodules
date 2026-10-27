@@ -12,3 +12,8 @@
 	path = vendor/overrides/fast-uri
 	url = https://github.com/fastify/fast-uri.git
 	shallow = true
+# @gliner-runner/onnx-runner v0.4.0 @ 76905f63137f7aaed3f85485301fee844377875a
+[submodule "vendor/gliner-runner"]
+	path = vendor/gliner-runner
+	url = https://github.com/stuffbucket/gliner-runner.git
+	shallow = true

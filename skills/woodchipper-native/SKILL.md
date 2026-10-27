@@ -17,18 +17,16 @@ Use this skill for native binaries (ELF, PE, Mach-O, DOS MZ/COM, raw images), ke
 Do NOT call `open_binary` or wait for a cold Ghidra/Hopper import if a built-in target-free tool
 answers the question in milliseconds:
 
-| Artifact / Question | Target-Free Tool (MCP) | CLI Equivalent | Key Semantics |
+| Artifact / Question | Tool (MCP) | CLI Equivalent | Key Semantics |
 | :--- | :--- | :--- | :--- |
-| **Desktop install folder** | `inspect_desktop_application` | `inspect-desktop-application <dir> --detail summary` | Maps runtime candidates, Electron/CEF/Qt/Unity markers, and next probes. |
-| **Go compiler, modules, build flags** | `inspect_go_binary` | `inspect-go-binary <path>` | Built-in static ELF/PE/Mach-O parser; no Go or disassembler needed. |
-| **Rust cargo-auditable crates (`.dep-v0`)** | `inspect_rust_binary` | `inspect-rust-binary <path>` | Extracts crate graph and versions; use `detail: "summary"` or `view.collection: "packages"`. |
-| **ELF PT_NOTE / SHT_NOTE / build-id** | `inspect_elf_notes` | `inspect-elf-notes <path>` | Extracts GNU build-id, ABI tag, owner/type ranges. |
-| **Linux ELF sections, relocs, mitigations** | `inspect_binary_layout` | `inspect-binary-layout <path>` | Uses pwntools offline (`detail: "summary"` → `inspect_analysis_view`). |
-| **PE32/PE32+ resource tree & icons** | `inspect_pe_resources` | `inspect-pe-resources <path>` | Extracts resource IDs, UTF-16 names, code pages, SHA-256 without opening target. |
-| **Mach-O slices, load commands, exports** | `inspect_macho` (`detail: "summary"`) | `inspect-macho <path>` | Always use `detail: "summary"` on frameworks, then page via `inspect_analysis_view` (`kind: "macho"`). |
-| **CUDA / HIP GPU kernels & PTX** | `inspect_gpu_code_objects` | `inspect-gpu-code-objects <path>` | Inventories embedded fatbins/CUBIN/PTX and kernel parameters. |
-| **GGUF / safetensors model headers** | `inspect_model_artifact` | `inspect-model-artifact <path>` | Reads tensor declarations and metadata without loading weights (`hash: "full"` optional). |
-| **Entropy scan (packed / encrypted check)** | `inspect_byte_entropy` | `inspect-byte-entropy <path>` | Identifies high-entropy compressed/encrypted sections before decompilation. |
+| **Desktop / app bundle container** | `open_binary` + `inspect_artifact` (`detail: "summary"`) | `inspect-artifact --detail summary` | Inventories packaged files, embedded archives, and runtime markers; for Electron/JS trees use `analyze_javascript_application`. |
+| **Go compiler, modules, build flags** | `inspect_go_binary` | `inspect-go-binary <path>` | Target-free static ELF/PE/Mach-O parser; no Go or disassembler needed. |
+| **Rust cargo-auditable crates (`.dep-v0`)** | `inspect_rust_binary` | `inspect-rust-binary <path>` | Target-free extractor for crate graph and versions (`include_dependencies: true`). |
+| **ELF sections, symbols, relocs, mitigations** | `inspect_binary_layout` (`detail: "summary"`) | `inspect-binary-layout <path>` | Target-free offline layout & mitigation inspector (`detail: "summary"` → `inspect_analysis_view`). |
+| **Disassembly / section headers (`objdump`)** | `inspect_with_objdump` | `inspect-with-objdump <path>` | Target-free `objdump` wrapper for quick section, symbol, and instruction inspection. |
+| **PE32/PE32+ resource tree & icons** | `inspect_pe_resources` | `inspect-pe-resources <path>` | Target-free extractor for resource IDs, UTF-16 names, code pages, and SHA-256. |
+| **Mach-O slices, load commands, exports** | `open_binary` + `inspect_macho` (`detail: "summary"`) | `inspect-macho` | Active-session Mach-O inspector; use `detail: "summary"` on frameworks, then page via `inspect_analysis_view` (`kind: "macho"`). |
+| **Embedded regions / packed partitions** | `inspect_firmware_regions` | `inspect-firmware-regions <path>` | Target-free scanner for compressed/encrypted regions and embedded container headers. |
 
 ## Phase 2: Active-Session Deep Native Analysis (`open_binary`)
 

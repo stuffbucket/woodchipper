@@ -1,0 +1,7 @@
+{
+  "name": "acme-telemetry-sync",
+  "version": "2.4.1",
+  "description": "Sample Electron desktop target for verifying Woodchipper triage, GLiNER intent routing, and REA 6.7.0 static analysis",
+  "main": "main.js",
+  "private": true
+}

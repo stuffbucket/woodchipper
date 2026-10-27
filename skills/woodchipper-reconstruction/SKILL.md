@@ -50,7 +50,7 @@ Never claim equivalence just because a few manual examples passed:
    - For .NET assemblies, use `import_managed_reconstruction`, `compare_managed_members`, and `verify_managed_native_boundaries`.
    - For JS bundles vs. reconstructed source, use `compare_source_to_bundle` and `compare_javascript_export_shapes`.
 2. **Generate Comparison Evidence:**
-   - Pair functions across original and reconstructed binaries with `match_native_functions`, then compare dossiers with `compare_functions`.
+   - Inventory procedures across original and reconstructed binaries with `list_procedures`, then compare dossiers with `compare_functions` and `find_changed_behavior`.
    - Compare runtime executions with `compare_process_captures`.
 3. **Run `verify_reconstruction`:**
    - Pass a finite typed specification and the retained comparison `evidence_id`s to `verify_reconstruction`.

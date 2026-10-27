@@ -36,15 +36,14 @@ Never classify a static hypothesis as a confirmed vulnerability without complete
    - For JS/Electron apps, run `analyze_javascript_application` on each and call `compare_application_versions` or `compare_javascript_export_shapes`.
 2. **Native Function Matching & Diffing:**
    - Collect `list_procedures` (and optional `list_names`, `procedure_info`, `read_bytes`) on both versions; export bundles before closing if switching targets.
-   - Call `match_native_functions` and page matches via `inspect_analysis_view` (`kind: "function-matches"`).
-   - Call `analyze_function` on changed candidates and run `compare_functions` and `find_changed_behavior`.
-   - Check whether a security fix added in `v2` is missing on sibling callers or parallel handlers.
+   - Call `analyze_function` on candidate procedures across both versions and run `compare_functions` and `find_changed_behavior`.
+   - Check whether a security fix added in `v2` is missing on sibling callers (`procedure_callers`) or parallel handlers (`search_procedures`).
 
 ## 3. Crash Triage & Core Dump Root-Cause Analysis
 
 - **Recorded Linux ELF Core Dumps (`inspect_recorded_crash`):**
   - Target-free tool: reads thread registers, signals, and ELF notes from an x86-64 core file without attaching to a live process. Pass `include_debugger_context: true` when GDB/pwndbg core mapping candidates help.
-- **Correlating Crash Traces with Static Code (`trace_crash`):**
+- **Correlating Crash Traces with Static Code (`trace_crash` guided prompt):**
   - Resolve crash addresses or panic strings via `resolve_containing_procedure`, `search_strings`, and `analyze_function`.
   - Trace backward through callers (`procedure_callers`, `build_call_path`) and correlate with bounded process captures via `correlate_static_and_runtime`.
 

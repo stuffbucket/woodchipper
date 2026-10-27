@@ -17,8 +17,8 @@ signal, and binary diagnostics workflows.
 
 ### Agent Execution Sequence
 
-1. **Container & Entropy Triage (Static Only):**
-   - Run `inspect_byte_entropy` and `inspect_firmware_regions` to identify SquashFS, JFFS2, UBI, cramfs, bootloaders, and kernels with exact byte offsets.
+1. **Container & Region Triage (Static Only):**
+   - Run `inspect_firmware_regions` and `inspect_binary_layout` (`detail: "summary"`) to identify SquashFS, JFFS2, UBI, cramfs, bootloaders, and kernels with exact byte offsets.
    - Extract partitions into a new empty folder via `extract_firmware`.
 2. **Headerless MCU / Raw Binary Mapping:**
    - Open raw firmware in Ghidra (`open_binary` with `format: "raw-binary"`, `architecture`, and `entry_point`).
