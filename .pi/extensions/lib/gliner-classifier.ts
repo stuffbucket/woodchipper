@@ -1016,15 +1016,16 @@ export function renderWoodchipperHeaderLines(
 
 	return [
 		topBorder,
-		boxRow(`Model: ${modelLabel} (auto-failover)  •  Engine: REA 6.7.0 (207 tools) + GLiNER decide-340m`),
+		boxRow(`Model:  ${modelLabel} (auto-failover enabled)`),
+		boxRow("Engine: REA 6.7.0 (207 tools)  •  Classifier: GLiNER decide-340m", "muted"),
 		boxRow(`Output: ${reportRel}  (isolated per target • never commingled)`, "muted"),
 		boxRow(""),
-		boxRow("Drop any file path or ask in plain English — no reverse-engineering jargon required:"),
+		boxRow("Drop any file path or ask in plain English (no RE jargon required):"),
 		boxRow('  • "What is /path/to/app and does it phone home?"', "dim"),
 		boxRow('  • "How does the license check or export button work in /path/to/binary?"', "dim"),
-		boxRow('  • "Audit /path/to/driver.sys for unsafe inputs or command execution sinks"', "dim"),
+		boxRow('  • "Audit /path/to/driver.sys for unsafe inputs or execution sinks"', "dim"),
 		boxRow(""),
-		boxRow("Commands: /start <path> • /triage • /trace • /audit • /clone-spec • /ledger • /maximal • /doctor", "muted"),
+		boxRow("Commands: /start <path> • /triage • /trace • /audit • /clone-spec • /ledger", "muted"),
 		bottomBorder,
 	];
 }
