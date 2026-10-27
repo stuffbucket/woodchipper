@@ -1025,7 +1025,113 @@ export function renderWoodchipperHeaderLines(
 		boxRow('  • "How does the license check or export button work in /path/to/binary?"', "dim"),
 		boxRow('  • "Audit /path/to/driver.sys for unsafe inputs or execution sinks"', "dim"),
 		boxRow(""),
-		boxRow("Commands: /start <path> • /triage • /trace • /audit • /clone-spec • /ledger", "muted"),
+		boxRow("Commands: /start <path> • /status • /triage • /trace • /audit • /ledger • /exit", "muted"),
 		bottomBorder,
 	];
+}
+
+export interface WoodchipperStatusInput {
+	projectRoot: string;
+	cwd: string;
+	mode: string;
+	pid: number;
+	sessionFile?: string;
+	activeModelId: string;
+	activeProvider: string;
+	thinkingLevel?: string;
+	contextTokens?: number | null;
+	contextWindow?: number | null;
+	contextPercent?: number | null;
+	maximalBaseUrl: string;
+	maximalReachable: boolean;
+	maximalSource: "live" | "fallback";
+	maximalVersion?: string;
+	copilotReady?: boolean;
+	copilotAccountType?: string;
+	apiKeySource: string;
+	failoverChain: readonly string[];
+	workspaceSlug: string;
+	workspaceDir: string;
+	reportPath: string;
+	triageMapPath: string;
+	ledgerPath: string;
+	targetPath?: string;
+	targetFileDescription?: string;
+	targetSizeHuman?: string;
+	targetSha256?: string | null;
+	recommendedPlaybook: string;
+	recommendedSubSkill: string;
+	expertiseLevel: UserExpertiseLevel;
+	lastUserPrompt?: string;
+	ledgerCounts: {
+		evidenceIds: number;
+		observations: number;
+		inferences: number;
+		unknowns: number;
+		unresolvedUnknowns: number;
+	};
+	glinerModelId: string;
+	glinerInstalled: boolean;
+	glinerRunnerAvailable: boolean;
+	glinerModelsDir: string;
+}
+
+/**
+ * Format a comprehensive Claude-Code-style `/status` operational dashboard.
+ */
+export function formatWoodchipperStatusDashboard(info: WoodchipperStatusInput): string {
+	const contextStr =
+		typeof info.contextTokens === "number" && typeof info.contextWindow === "number" && info.contextWindow > 0
+			? `${info.contextTokens.toLocaleString()} / ${info.contextWindow.toLocaleString()} tokens (${(info.contextPercent ?? (info.contextTokens / info.contextWindow) * 100).toFixed(1)}%)`
+			: info.contextWindow
+				? `0 / ${info.contextWindow.toLocaleString()} tokens`
+				: "N/A (no turn completed yet)";
+
+	const lines: string[] = [
+		"# Woodchipper Operational Status (`/status`)",
+		"",
+		"## 1. Where Woodchipper Is Running (Session & Runtime)",
+		`- **Project Root:** \`${info.projectRoot}\``,
+		`- **Working Directory (\`cwd\`):** \`${info.cwd}\``,
+		`- **Run Mode & PID:** \`${info.mode}\` (PID \`${info.pid}\`)`,
+		`- **Session Transcript:** \`${info.sessionFile ?? path.join(info.workspaceDir, "sessions")}\``,
+		`- **Claude Code A2A Peer Socket:** \`/tmp/cc-socks/${info.pid}.sock\` (registry: \`~/.claude/sessions/${info.pid}.json\`)`,
+		"",
+		"## 2. Where the Model Is Pulled From (`maximal` Provider)",
+		`- **Active Model:** \`${info.activeProvider}/${info.activeModelId}\` (thinking level: \`${info.thinkingLevel ?? "high"}\`)`,
+		`- **Provider Endpoint:** \`${info.maximalBaseUrl}\` (${info.maximalReachable ? "ONLINE" : "OFFLINE — using fallback catalog"}, catalog: \`${info.maximalSource}\`)`,
+		...(info.maximalVersion
+			? [
+					`- **Upstream Proxy:** \`maximal v${info.maximalVersion}\` (Copilot ready: \`${Boolean(info.copilotReady)}\`${info.copilotAccountType ? `, account: \`${info.copilotAccountType}\`` : ""}, auth: \`${info.apiKeySource}\`)`,
+				]
+			: [`- **Auth Key Source:** \`${info.apiKeySource}\``]),
+		`- **Context Window Usage:** ${contextStr}`,
+		`- **Automatic Refusal Failover Chain:** ${info.failoverChain.map((m) => `\`${m}\``).join(" -> ")}`,
+		"",
+		"## 3. Current Work & Investigation Purpose",
+		`- **Active Target Artifact:** ${info.targetPath ? `\`${info.targetPath}\`` : "_None selected yet (drop a file path or run `/start <path>`)_"}`,
+		...(info.targetPath && info.targetFileDescription
+			? [
+					`- **Target Fingerprint:** ${info.targetFileDescription} • Size: ${info.targetSizeHuman ?? "?"} • SHA-256: \`${info.targetSha256 ?? "N/A (directory)"}\``,
+				]
+			: []),
+		`- **Active Playbook & Sub-Skill:** Playbook \`${info.recommendedPlaybook}\` • Sub-Skill \`${info.recommendedSubSkill}\``,
+		`- **Calibrated Operator Mode:** \`${info.expertiseLevel}\``,
+		`- **Current Goal / Last Prompt:** ${info.lastUserPrompt ? `"${info.lastUserPrompt.slice(0, 160)}${info.lastUserPrompt.length > 160 ? "…" : ""}"` : "_Waiting for first prompt_"}`,
+		"",
+		"## 4. Where Output Goes (Isolated Per-Target Workspace)",
+		`- **Workspace Directory:** \`${info.workspaceDir}\` (\`${info.workspaceSlug}\` — isolated from all other projects)`,
+		`- **Human-Readable Report:** \`${info.reportPath}\``,
+		`- **Static Triage Map:** \`${info.triageMapPath}\``,
+		`- **Structured Evidence Ledger:** \`${info.ledgerPath}\``,
+		"",
+		"## 5. Important Input & Evidence State",
+		`- **Captured REA Evidence Receipts (\`ev_*\`):** ${info.ledgerCounts.evidenceIds}`,
+		`- **Verified Observations:** ${info.ledgerCounts.observations}`,
+		`- **Recorded Inferences:** ${info.ledgerCounts.inferences}`,
+		`- **Open Unknowns:** ${info.ledgerCounts.unresolvedUnknowns} unresolved (${info.ledgerCounts.unknowns} total)`,
+		`- **GLiNER Intent/Signal Classifier (\`${info.glinerModelId}\`):** model installed=\`${info.glinerInstalled}\`, runner available=\`${info.glinerRunnerAvailable}\` (\`${info.glinerModelsDir}\`)`,
+	];
+
+	return lines.join("\n");
 }
