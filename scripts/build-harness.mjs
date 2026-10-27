@@ -69,6 +69,7 @@ function main() {
 
 	// Ensure executable permissions on CLI entrypoints
 	for (const scriptRel of [
+		"woodchipper",
 		"bin/woodchipper.mjs",
 		"scripts/woodchipper-ctl.mjs",
 		"scripts/build-harness.mjs",

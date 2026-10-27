@@ -54,6 +54,43 @@ export function resolvePiCommand() {
 	return { command: "pi", prefixArgs: [], source: "PATH" };
 }
 
+export function isHarnessInitialized(projectRoot = PROJECT_ROOT) {
+	const hasSubmodules =
+		fs.existsSync(path.join(projectRoot, "vendor", "pi", "package.json")) &&
+		fs.existsSync(path.join(projectRoot, "vendor", "gliner-runner", "packages", "onnx-runner", "package.json"));
+	const hasNodeModules = fs.existsSync(path.join(projectRoot, "node_modules", "rea-agents", "package.json"));
+	const piCmd = resolvePiCommand();
+	const hasPiRuntime = piCmd.source !== "PATH" || fs.existsSync(piCmd.command);
+	return hasSubmodules && hasNodeModules && hasPiRuntime;
+}
+
+export function ensureHarnessBootstrapped(projectRoot = PROJECT_ROOT, env = process.env) {
+	if (env.WOODCHIPPER_SKIP_AUTO_SETUP === "1" || isHarnessInitialized(projectRoot)) {
+		return false;
+	}
+	if (
+		!fs.existsSync(path.join(projectRoot, "vendor", "pi", "package.json")) ||
+		!fs.existsSync(path.join(projectRoot, "vendor", "gliner-runner", "packages", "onnx-runner", "package.json"))
+	) {
+		console.error("[woodchipper] Initializing git submodules...");
+		execFileSync("git", ["submodule", "update", "--init", "--recursive"], {
+			cwd: projectRoot,
+			stdio: "inherit",
+			env,
+		});
+	}
+	if (!fs.existsSync(path.join(projectRoot, "node_modules", "rea-agents", "package.json"))) {
+		console.error("[woodchipper] First-run setup detected: running pnpm run setup...");
+		execFileSync("pnpm", ["run", "setup"], {
+			cwd: projectRoot,
+			stdio: "inherit",
+			env,
+		});
+		return true;
+	}
+	return false;
+}
+
 /**
  * Build CLI arguments for Pi.
  * Note: `.pi/SYSTEM.md` is automatically loaded by Pi from `<cwd>/.pi/SYSTEM.md`,
@@ -202,6 +239,17 @@ Usage:
 		return;
 	}
 
+	if (sub === "smoke") {
+		ensureHarnessBootstrapped(PROJECT_ROOT);
+		execFileSync(process.execPath, ["--experimental-strip-types", path.join(PROJECT_ROOT, "scripts", "smoke-test.mjs")], {
+			cwd: PROJECT_ROOT,
+			stdio: "inherit",
+		});
+		return;
+	}
+
+	ensureHarnessBootstrapped(PROJECT_ROOT);
+
 	if (sub === "daemon" || sub === "peer") {
 		runDaemonMode(argv.slice(1));
 		return;
@@ -214,7 +262,7 @@ Usage:
 		piArgs = buildWoodchipperPiArgs(argv.slice(1), "rpc");
 	} else if (sub === "ask") {
 		piArgs = buildWoodchipperPiArgs(argv.slice(1), "print");
-	} else if (sub === "tui") {
+	} else if (sub === "tui" || sub === "start") {
 		piArgs = buildWoodchipperPiArgs(argv.slice(1), "tui");
 	} else {
 		piArgs = buildWoodchipperPiArgs(argv);
@@ -223,7 +271,7 @@ Usage:
 	const child = spawn(piCmd.command, [...piCmd.prefixArgs, ...piArgs], {
 		cwd: PROJECT_ROOT,
 		stdio: "inherit",
-		env: resolveReaProviderEnv(),
+		env: resolveReaProviderEnv(process.env, PROJECT_ROOT),
 	});
 	attachChildErrorHandler(child, piCmd.command);
 

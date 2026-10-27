@@ -17,16 +17,27 @@ You need:
 The first setup installs pinned Node, pnpm, Python, and Java versions, initializes the Git submodules,
 builds two temporary dependency packages in Docker, and builds the local Pi runtime.
 
-## Install
+## Install & Launch (Single Command)
 
 ```sh
 git clone https://github.com/stuffbucket/woodchipper.git
 cd woodchipper
-mise trust
-mise run setup
+./woodchipper
 ```
 
-Setup can take several minutes because it builds the local runtime and checks its dependency graph.
+Or using `mise`:
+
+```sh
+mise run start
+```
+
+On first launch, `./woodchipper` (and `mise run start`) automatically trusts `mise.toml`, installs the pinned toolchain if missing, runs the one-time setup if the harness has not been built yet, and opens the interactive Woodchipper TUI. On every subsequent launch it opens the TUI immediately.
+
+If you prefer to run the build step separately beforehand:
+
+```sh
+mise run setup
+```
 
 ## Check the tools
 

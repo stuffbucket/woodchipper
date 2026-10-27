@@ -46,6 +46,7 @@
     "rea-agents": "6.7.0"
   },
   "scripts": {
+    "start": "node --experimental-strip-types bin/woodchipper.mjs",
     "setup": "git submodule update --init --recursive && node scripts/build-vendor-overrides.mjs && pnpm install --frozen-lockfile && pnpm run build:harness -- --with-submodule-build",
     "build:overrides": "node scripts/build-vendor-overrides.mjs",
     "build:pi": "node scripts/build-pi-overlay.mjs",
