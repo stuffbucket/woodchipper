@@ -14,11 +14,23 @@ import {
 	assessExpertiseAndMethodologyFeedback,
 	classifyBinarySignals,
 	classifyReverseEngineeringIntent,
+	defaultGlinerModelsDir,
 	ensureGlinerModelInstalled,
 	formatWoodchipperOrientationBanner,
+	formatWoodchipperStatusDashboard,
 	heuristicClassifyIntent,
+	isModelPresentOnDisk,
+	resolveGlinerRunnerCommand,
 	renderWoodchipperHeaderLines,
+	type UserExpertiseLevel,
 } from "./lib/gliner-classifier.ts";
+import {
+	DEFAULT_MAXIMAL_MODEL,
+	MAXIMAL_FAILOVER_CHAIN,
+	MAXIMAL_PROVIDER_NAME,
+	probeMaximalProvider,
+	resolveMaximalApiKey,
+} from "./lib/maximal-provider.ts";
 import { Type } from "./lib/schema.ts";
 import {
 	extractExistingTargetPathFromPrompt,
@@ -376,6 +388,10 @@ export const DIRECT_REA_TOOL_EXPOSURE: Readonly<Record<string, "direct">> = {
 export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	const projectRoot = resolveProjectRoot();
 	const ledger = new EvidenceLedger(projectRoot);
+	let lastUserPromptSeen = "";
+	let lastPlaybookSeen = "triage-and-feature-trace";
+	let lastSubSkillSeen = "woodchipper-native";
+	let lastExpertiseSeen: UserExpertiseLevel = "appliance-operator";
 
 	// =========================================================================
 	// 1. REA MCP Server Registration
@@ -1009,6 +1025,93 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("status", {
+		description:
+			"Show comprehensive Woodchipper operational status (runtime location, model source, current target/purpose, output files, and evidence state): /status [json]",
+		handler: async (args, ctx) => {
+			ledger.reload();
+			const data = ledger.getData();
+			const counts = ledger.getCounts();
+			const targetTriage = data.targetPath ? runStaticTriage(data.targetPath, ctx?.cwd || projectRoot) : null;
+			const maximalAuth = resolveMaximalApiKey();
+			const maximalProbe = await probeMaximalProvider();
+			const modelsDir = defaultGlinerModelsDir(process.env, projectRoot);
+			const glinerRunner = resolveGlinerRunnerCommand(projectRoot);
+			const glinerInstalled = isModelPresentOnDisk(modelsDir);
+			const contextUsage = ctx?.getContextUsage?.();
+
+			const statusInput = {
+				projectRoot,
+				cwd: ctx?.cwd || projectRoot,
+				mode: ctx?.mode || "tui",
+				pid: process.pid,
+				sessionFile: ctx?.sessionManager?.getSessionFile?.() ?? undefined,
+				activeModelId: ctx?.model?.id || DEFAULT_MAXIMAL_MODEL,
+				activeProvider: ctx?.model?.provider || MAXIMAL_PROVIDER_NAME,
+				thinkingLevel: ctx?.thinkingLevel ? String(ctx.thinkingLevel) : "high",
+				contextTokens: contextUsage?.tokens ?? null,
+				contextWindow: contextUsage?.contextWindow ?? ctx?.model?.contextWindow ?? null,
+				contextPercent: contextUsage?.percent ?? null,
+				maximalBaseUrl: maximalProbe.baseUrl,
+				maximalReachable: maximalProbe.reachable,
+				maximalSource: maximalProbe.source,
+				maximalVersion: maximalProbe.status?.version,
+				copilotReady: maximalProbe.status?.subsystems?.copilot?.ready,
+				copilotAccountType: maximalProbe.status?.subsystems?.copilot?.account_type,
+				apiKeySource: maximalAuth.source,
+				failoverChain: MAXIMAL_FAILOVER_CHAIN,
+				workspaceSlug: ledger.getWorkspaceSlug(),
+				workspaceDir: ledger.getWorkspaceDir(),
+				reportPath: ledger.getReportPath(),
+				triageMapPath: ledger.getTriageMapPath(),
+				ledgerPath: ledger.getLedgerPath(),
+				targetPath: data.targetPath,
+				targetFileDescription: targetTriage?.exists ? targetTriage.fileDescription : undefined,
+				targetSizeHuman: targetTriage?.exists ? targetTriage.sizeHuman : undefined,
+				targetSha256: targetTriage?.exists ? targetTriage.sha256 : undefined,
+				recommendedPlaybook: targetTriage?.exists ? targetTriage.recommendedPlaybook : lastPlaybookSeen,
+				recommendedSubSkill: targetTriage?.exists ? targetTriage.recommendedSubSkill : lastSubSkillSeen,
+				expertiseLevel: lastExpertiseSeen,
+				lastUserPrompt: lastUserPromptSeen || undefined,
+				ledgerCounts: counts,
+				glinerModelId: "decide-340m",
+				glinerInstalled,
+				glinerRunnerAvailable: glinerRunner.available,
+				glinerModelsDir: modelsDir,
+			};
+
+			const content =
+				args.trim().toLowerCase() === "json"
+					? `\`\`\`json\n${JSON.stringify(statusInput, null, 2)}\n\`\`\``
+					: formatWoodchipperStatusDashboard(statusInput);
+
+			pi.sendMessage(
+				{
+					customType: "woodchipper-status",
+					content,
+					display: true,
+					details: statusInput,
+				},
+				{ triggerTurn: false },
+			);
+			if (ctx?.hasUI) {
+				ctx.ui.notify(
+					`Status: ${statusInput.activeProvider}/${statusInput.activeModelId} • workspace=${statusInput.workspaceSlug} • ${counts.observations} obs, ${counts.inferences} inf, ${counts.unresolvedUnknowns} open unknowns`,
+					"info",
+				);
+			}
+		},
+	});
+
+	pi.registerCommand("exit", {
+		description: "Gracefully exit the Woodchipper TUI session (alias for /quit): /exit",
+		handler: async (_args, ctx) => {
+			if (typeof ctx?.shutdown === "function") {
+				ctx.shutdown();
+			}
+		},
+	});
+
 	// =========================================================================
 	// 5. Startup Orientation Header & System Prompt Enrichment
 	// =========================================================================
@@ -1053,6 +1156,16 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 
 		const intentHint = userPrompt ? heuristicClassifyIntent(userPrompt) : null;
 		const assessment = userPrompt ? assessExpertiseAndMethodologyFeedback(userPrompt) : null;
+		if (userPrompt) {
+			lastUserPromptSeen = userPrompt;
+		}
+		if (intentHint) {
+			lastPlaybookSeen = intentHint.recommendedPlaybook;
+			lastSubSkillSeen = intentHint.recommendedSubSkill;
+		}
+		if (assessment) {
+			lastExpertiseSeen = assessment.expertiseLevel;
+		}
 
 		const disciplineLines = [
 			"Woodchipper 5.5-Series Reverse-Engineering Operating Discipline:",

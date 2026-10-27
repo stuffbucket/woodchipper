@@ -198,6 +198,14 @@ const MUTANTS = [
 		replacement: "if (true || !raw || raw === \"default\") {\n\t\treturn \"default\";\n\t}",
 		testFile: "tests/pi-extension.test.mjs",
 	},
+	{
+		id: "M23_EXIT_COMMAND_SHUTDOWN",
+		description: "Disable ctx.shutdown() invocation in /exit command handler",
+		file: ".pi/extensions/woodchipper-rea.ts",
+		target: "if (typeof ctx?.shutdown === \"function\") {\n\t\t\t\tctx.shutdown();\n\t\t\t}",
+		replacement: "if (false && typeof ctx?.shutdown === \"function\") {\n\t\t\t\tctx.shutdown();\n\t\t\t}",
+		testFile: "tests/pi-extension.test.mjs",
+	},
 ];
 
 function runTestFile(relTestFile) {

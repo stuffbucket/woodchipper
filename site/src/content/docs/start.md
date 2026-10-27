@@ -64,6 +64,7 @@ The TUI displays an orientation banner on startup and accepts plain-English ques
 
 ```text
 /start /path/to/target
+/status [json]
 /triage /path/to/target
 /trace /path/to/target "feature or behavior"
 /clone-spec /path/to/target
@@ -72,6 +73,7 @@ The TUI displays an orientation banner on startup and accepts plain-English ques
 /maximal [status|models|refresh|use <model-id>]
 /ledger
 /doctor
+/exit
 ```
 
 Start with `/start /path/to/target` or simply ask a plain-English question (for example, `"What is /path/to/target and does it phone home?"`). Every target automatically receives its own isolated workspace under `workspaces/<target-slug>/` containing `REPORT.md`, `TRIAGE_MAP.md`, `evidence-ledger.json`, and `sessions/`.

@@ -99,7 +99,7 @@ test("registers REA MCP server, 3 custom tools, 6 slash commands, and lifecycle 
 		}
 
 		// 3. Slash commands
-		for (const cmdName of ["triage", "trace", "clone-spec", "audit", "ledger", "doctor"]) {
+		for (const cmdName of ["start", "status", "exit", "gliner", "triage", "trace", "clone-spec", "audit", "ledger", "doctor"]) {
 			assert.ok(state.commands.has(cmdName), `Expected slash command '/${cmdName}' to be registered`);
 		}
 
@@ -470,6 +470,38 @@ test("woodchipper_triage, woodchipper_playbook, slash commands, and before_agent
 		const doc = runReaDoctorSummary(ROOT);
 		assert.equal(doc.reaVersion, "6.7.0");
 		assert.ok(doc.backends.length >= 7);
+
+		// /status command emits comprehensive operational dashboard
+		const statusCmd = state.commands.get("status");
+		await statusCmd.handler("", {
+			cwd: ROOT,
+			mode: "tui",
+			hasUI: false,
+			model: { provider: "maximal", id: "claude-sonnet-5-5-20260301", contextWindow: 200000 },
+			thinkingLevel: "high",
+			getContextUsage() {
+				return { tokens: 12400, contextWindow: 200000, percent: 6.2 };
+			},
+			ui: { notify() {} },
+		});
+		const statusMsg = state.sentMessages.find((m) => m.message.customType === "woodchipper-status");
+		assert.ok(statusMsg, "Expected /status to emit woodchipper-status message");
+		assert.match(statusMsg.message.content, /Where Woodchipper Is Running/);
+		assert.match(statusMsg.message.content, /Where the Model Is Pulled From/);
+		assert.match(statusMsg.message.content, /Current Work & Investigation Purpose/);
+		assert.match(statusMsg.message.content, /Where Output Goes/);
+		assert.match(statusMsg.message.content, /Important Input & Evidence State/);
+		assert.match(statusMsg.message.content, /12,400 \/ 200,000 tokens/);
+
+		// /exit command invokes ctx.shutdown()
+		let shutdownCalled = false;
+		const exitCmd = state.commands.get("exit");
+		await exitCmd.handler("", {
+			shutdown() {
+				shutdownCalled = true;
+			},
+		});
+		assert.equal(shutdownCalled, true, "Expected /exit to call ctx.shutdown()");
 	} finally {
 		if (prevEnv === undefined) {
 			delete process.env.WOODCHIPPER_PROJECT_ROOT;
