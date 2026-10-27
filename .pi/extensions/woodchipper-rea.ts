@@ -334,6 +334,43 @@ const CLASSIFY_TOOL_PARAMS = Type.Object({
 	),
 });
 
+/**
+ * Core entry-point REA 6.7.0 tools exposed directly (`"direct"`) to the model on Turn 1
+ * so Pi waits for the `rea` MCP server connection before running the first prompt, while
+ * keeping the remaining ~180 specialized REA tools `"deferred"` via `tool_search`.
+ */
+export const DIRECT_REA_TOOL_EXPOSURE: Readonly<Record<string, "direct">> = {
+	analyze_javascript_application: "direct",
+	inspect_analysis_view: "direct",
+	trace_application_feature: "direct",
+	inspect_electron_fuses: "direct",
+	inspect_web_network_capture: "direct",
+	inspect_binary_layout: "direct",
+	inspect_go_binary: "direct",
+	inspect_rust_binary: "direct",
+	inspect_pe_resources: "direct",
+	inspect_with_objdump: "direct",
+	inspect_sqlite_database: "direct",
+	inspect_android_package: "direct",
+	inspect_managed_artifact: "direct",
+	inspect_wasm_artifact: "direct",
+	inspect_evm_interface: "direct",
+	inspect_firmware_regions: "direct",
+	inspect_plist: "direct",
+	open_binary: "direct",
+	close_binary: "direct",
+	inspect_macho: "direct",
+	inspect_artifact: "direct",
+	search_strings: "direct",
+	search_procedures: "direct",
+	analyze_function: "direct",
+	xrefs: "direct",
+	resolve_containing_procedure: "direct",
+	compare_functions: "direct",
+	record_unknown: "direct",
+	list_unknowns: "direct",
+};
+
 export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	const projectRoot = resolveProjectRoot();
 	const ledger = new EvidenceLedger(projectRoot);
@@ -347,6 +384,9 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			args: ["exec", "rea", "mcp"],
 			cwd: projectRoot,
 			env: resolveReaProviderEnv(process.env, projectRoot),
+			exposure: "deferred",
+			toolExposure: { ...DIRECT_REA_TOOL_EXPOSURE },
+			timeout: 300,
 			description:
 				"Reverse Engineer Anything (REA) MCP server providing static, dynamic, firmware, JS/Electron, mobile, and reconstruction tools.",
 		});

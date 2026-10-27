@@ -141,6 +141,13 @@ export class EvidenceLedger {
 		this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
 		this.data = this.loadFromDisk();
 		this.data.targetPath = resolved;
+		try {
+			const workspacesRoot = path.join(this.projectRoot, "workspaces");
+			fs.mkdirSync(workspacesRoot, { recursive: true });
+			fs.writeFileSync(path.join(workspacesRoot, "ACTIVE_WORKSPACE"), `${this.workspaceSlug}\n`, "utf8");
+		} catch {
+			// Ignore on read-only filesystem
+		}
 		return {
 			workspaceSlug: this.workspaceSlug,
 			workspaceDir: this.workspaceDir,
@@ -234,6 +241,23 @@ export class EvidenceLedger {
 	}
 
 	public reload(): EvidenceLedgerData {
+		if (this.workspaceSlug === "default") {
+			try {
+				const activePointer = path.join(this.projectRoot, "workspaces", "ACTIVE_WORKSPACE");
+				if (fs.existsSync(activePointer)) {
+					const pointedSlug = fs.readFileSync(activePointer, "utf8").trim();
+					if (pointedSlug && pointedSlug !== "default" && /^[a-z0-9._-]+$/i.test(pointedSlug)) {
+						this.workspaceSlug = pointedSlug;
+						this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
+						this.ledgerPath = path.join(this.workspaceDir, "evidence-ledger.json");
+						this.reportPath = path.join(this.workspaceDir, "REPORT.md");
+						this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
+					}
+				}
+			} catch {
+				// Ignore
+			}
+		}
 		this.data = this.loadFromDisk();
 		return this.data;
 	}
@@ -355,7 +379,7 @@ export class EvidenceLedger {
 			let match = regex.exec(block);
 			while (match !== null) {
 				const id = match[0];
-				if (!discovered.has(id)) {
+				if (id !== "ev_unspecified" && !discovered.has(id)) {
 					discovered.set(id, {
 						id,
 						parentId: defaultParent && defaultParent !== id ? defaultParent : undefined,
@@ -400,7 +424,7 @@ export class EvidenceLedger {
 			recordedAt,
 		};
 		this.data.observations.push(entry);
-		if (entry.evidenceId.startsWith("ev_")) {
+		if (entry.evidenceId.startsWith("ev_") && entry.evidenceId !== "ev_unspecified") {
 			this.upsertEvidenceIdInMemory(entry.evidenceId, input.toolName ?? "woodchipper_ledger");
 		}
 		this.saveToDisk();
