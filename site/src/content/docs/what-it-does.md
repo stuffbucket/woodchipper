@@ -48,8 +48,10 @@ Woodchipper does not:
 A report can end as inconclusive. The report should state the missing evidence and the next bounded
 check that could resolve it.
 
-## Local configuration
+## Local configuration, model resilience, and zero-jargon routing
 
-REA registration, prompts, skills, hooks, and the evidence ledger are part of the project-local Pi
-harness. Setup does not add global Claude Code hooks or MCP settings. The optional local peer can be
-disabled with `--no-peer` or `WOODCHIPPER_NO_PEER=1`.
+REA registration (`rea-agents@6.7.0`), prompts, skills, hooks, the GLiNER (`decide-340m`) classifier (`vendor/gliner-runner`), the `maximal` provider (`http://127.0.0.1:4141`), and per-target workspaces (`workspaces/<slug>/`) are self-contained inside the project-local Pi harness:
+
+- **Appliance-to-Expert Adaptation & Proactive Feedback:** By default, Woodchipper operates as an autonomous reverse-engineering appliance—translating plain-English questions via GLiNER (`decide-340m`, auto-pulled into `vendor/gliner-runner/models` when needed) into the right playbook and sub-skill without requiring domain jargon. As the user demonstrates reverse-engineering fluency, it escalates technical depth while still pushing back constructively against premature dynamic execution or whole-binary dumps.
+- **Maximal Provider & Automatic Refusal Failover:** Connects to `maximal` on `http://127.0.0.1:4141` (`claude-sonnet-5-5-20260301` default) and automatically fails over across `claude-sonnet-5-5-20260301 -> gemini-4-argon -> gpt-5.3-codex -> gpt-6` if an upstream model endpoint triggers a false-positive cyber-policy refusal.
+- **Zero Global State Leakage:** Setup does not add global Claude Code hooks or MCP settings, blocks global `~/.agents/skills`, and isolates XDG and session state inside `workspaces/`. The optional local peer socket can be disabled with `--no-peer` or `WOODCHIPPER_NO_PEER=1`.
