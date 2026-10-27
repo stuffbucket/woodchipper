@@ -21,6 +21,7 @@ import {
 	ensureGlinerModelInstalled,
 	formatWoodchipperOrientationBanner,
 	renderWoodchipperHeaderLines,
+	stripAnsi,
 } from "../.pi/extensions/lib/gliner-classifier.ts";
 import {
 	PLAYBOOK_CATALOG,
@@ -680,10 +681,11 @@ test("workspaces isolate findings per target and never leak into global XDG or ~
 			getWorkspaceSlug: () => "default",
 			getReportPath: () => path.join(tmpRoot, "workspaces", "default", "REPORT.md"),
 		});
-		assert.ok(headerLines.length >= 8);
-		assert.ok(headerLines.some((l) => l.includes("WOODCHIPPER")));
+		assert.ok(headerLines.length >= 6);
+		assert.ok(headerLines.some((l) => stripAnsi(l).includes("WOODCHIPPER")));
 		for (const line of headerLines) {
-			assert.ok(line.length <= 90, `Header line exceeded width 90: ${line.length}`);
+			const visLen = stripAnsi(line).length;
+			assert.ok(visLen <= 90, `Header line exceeded visible width 90: ${visLen}`);
 		}
 	} finally {
 		fs.rmSync(tmpRoot, { recursive: true, force: true });

@@ -973,8 +973,71 @@ export function formatWoodchipperOrientationBanner(params: {
 	].join("\n");
 }
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI SGR escape sequences to measure visible width
+const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;]*m/g;
+
+export function stripAnsi(text: string): string {
+	return text.replace(ANSI_ESCAPE_REGEX, "");
+}
+
+function rgbFg(r: number, g: number, b: number, text: string): string {
+	return `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`;
+}
+
+function rgbPill(bgR: number, bgG: number, bgB: number, fgR: number, fgG: number, fgB: number, label: string): string {
+	return `\x1b[1m\x1b[48;2;${bgR};${bgG};${bgB}m\x1b[38;2;${fgR};${fgG};${fgB}m ${label} \x1b[0m`;
+}
+
+function boldText(text: string): string {
+	return `\x1b[1m${text}\x1b[22m`;
+}
+
 /**
- * Render width-safe lines for the custom Woodchipper TUI Header (`ctx.ui.setHeader`).
+ * Paint a string across a smooth wide-gamut 24-bit RGB gradient (Turborepo crimson -> electric violet -> cyan).
+ */
+export function gradientText(
+	text: string,
+	stops: ReadonlyArray<readonly [number, number, number]> = [
+		[255, 30, 86], // Electric Crimson (#FF1E56)
+		[214, 51, 182], // Vivid Magenta (#D633B6)
+		[0, 210, 255], // Electric Cyan (#00D2FF)
+	],
+): string {
+	const chars = Array.from(text);
+	if (chars.length === 0) return "";
+	let out = "";
+	const segments = Math.max(1, stops.length - 1);
+	for (let i = 0; i < chars.length; i++) {
+		const ch = chars[i];
+		if (ch === " ") {
+			out += " ";
+			continue;
+		}
+		const t = chars.length === 1 ? 0 : i / (chars.length - 1);
+		const segFloat = t * segments;
+		const segIdx = Math.min(segments - 1, Math.floor(segFloat));
+		const localT = segFloat - segIdx;
+		const c0 = stops[segIdx];
+		const c1 = stops[segIdx + 1] ?? c0;
+		const r = Math.round(c0[0] + (c1[0] - c0[0]) * localT);
+		const g = Math.round(c0[1] + (c1[1] - c0[1]) * localT);
+		const b = Math.round(c0[2] + (c1[2] - c0[2]) * localT);
+		out += `\x1b[38;2;${r};${g};${b}m${ch}`;
+	}
+	return `${out}\x1b[39m`;
+}
+
+function truncateVisible(styledText: string, maxVisibleCols: number): string {
+	const plain = stripAnsi(styledText);
+	if (plain.length <= maxVisibleCols) {
+		return styledText;
+	}
+	return `${plain.slice(0, Math.max(1, maxVisibleCols - 1))}…`;
+}
+
+/**
+ * Render width-safe lines for the custom Woodchipper TUI Header (`ctx.ui.setHeader`)
+ * using a wide-gamut truecolor gradient emblem and pill badges inspired by Turborepo.
  */
 export function renderWoodchipperHeaderLines(
 	width: number,
@@ -983,51 +1046,48 @@ export function renderWoodchipperHeaderLines(
 		getWorkspaceSlug: () => string;
 		getReportPath: () => string;
 	},
-	theme?: {
+	_theme?: {
 		fg?: (color: string, text: string) => string;
 		bold?: (text: string) => string;
 	},
 ): string[] {
-	const safeWidth = Math.max(40, width || 80);
-	const innerWidth = Math.max(36, Math.min(safeWidth - 4, 96));
-
-	const padOrClip = (plain: string): string => {
-		const clipped = plain.length > innerWidth ? `${plain.slice(0, innerWidth - 1)}…` : plain;
-		return `${clipped}${" ".repeat(Math.max(0, innerWidth - clipped.length))}`;
-	};
-
-	const fg = (color: string, text: string) => (theme?.fg ? theme.fg(color, text) : text);
-	const bold = (text: string) => (theme?.bold ? theme.bold(text) : text);
-
-	const topTitle = " WOODCHIPPER • Reverse-Engineering Appliance ";
-	const topDashCount = Math.max(2, innerWidth + 2 - topTitle.length);
-	const topBorder = fg("accent", `╭─${bold(topTitle)}${"─".repeat(topDashCount - 1)}╮`);
-	const bottomBorder = fg("accent", `╰${"─".repeat(innerWidth + 2)}╯`);
-
-	const boxRow = (plainText: string, tone?: "dim" | "accent" | "muted") => {
-		const content = padOrClip(plainText);
-		const styled = tone ? fg(tone, content) : content;
-		return `${fg("accent", "│")} ${styled} ${fg("accent", "│")}`;
-	};
+	const safeWidth = Math.max(52, width || 88);
+	const ruleWidth = Math.min(safeWidth - 2, 86);
 
 	const modelLabel = params.getActiveModel();
 	const wsSlug = params.getWorkspaceSlug();
 	const reportRel = `workspaces/${wsSlug}/REPORT.md`;
 
-	return [
-		topBorder,
-		boxRow(`Model:  ${modelLabel} (auto-failover enabled)`),
-		boxRow("Engine: REA 6.7.0 (207 tools)  •  Classifier: GLiNER decide-340m", "muted"),
-		boxRow(`Output: ${reportRel}  (isolated per target • never commingled)`, "muted"),
-		boxRow(""),
-		boxRow("Drop any file path or ask in plain English (no RE jargon required):"),
-		boxRow('  • "What is /path/to/app and does it phone home?"', "dim"),
-		boxRow('  • "How does the license check or export button work in /path/to/binary?"', "dim"),
-		boxRow('  • "Audit /path/to/driver.sys for unsafe inputs or execution sinks"', "dim"),
-		boxRow(""),
-		boxRow("Commands: /start <path> • /status • /triage • /trace • /audit • /ledger • /exit", "muted"),
-		bottomBorder,
+	const emblemRows = [
+		gradientText("  ██╗    ██╗ ██████╗  ", [[255, 30, 86], [235, 59, 145], [0, 210, 255]]),
+		gradientText("  ██║ ██╗██║██╔════╝  ", [[245, 45, 110], [185, 67, 214], [0, 195, 255]]),
+		gradientText("  ██║███╗██║██║       ", [[220, 55, 150], [130, 95, 245], [0, 180, 255]]),
+		gradientText("  ╚███╔███╔╝╚██████╗  ", [[185, 67, 214], [80, 140, 250], [0, 210, 255]]),
 	];
+
+	const badgeAppliance = rgbPill(255, 30, 86, 255, 255, 255, "WOODCHIPPER");
+	const badgeRea = rgbPill(24, 52, 78, 96, 218, 255, "REA 6.7.0 • 207 TOOLS");
+	const badgeGliner = rgbPill(58, 32, 86, 224, 168, 255, "GLiNER decide-340m");
+	const badgeFailover = rgbPill(22, 68, 52, 110, 242, 184, "AUTO-FAILOVER");
+
+	const divider = `  ${gradientText("━".repeat(ruleWidth), [[255, 30, 86], [148, 82, 235], [0, 210, 255]])}`;
+
+	const cmdPill = (cmd: string) => rgbFg(0, 210, 255, boldText(cmd));
+	const muted = (t: string) => rgbFg(142, 150, 170, t);
+	const bright = (t: string) => rgbFg(238, 242, 252, t);
+	const dim = (t: string) => rgbFg(108, 116, 138, t);
+
+	const lines = [
+		`${emblemRows[0]} ${badgeAppliance}  ${bright(boldText("Autonomous Reverse-Engineering Appliance"))}`,
+		`${emblemRows[1]} ${badgeRea} ${badgeGliner} ${badgeFailover}`,
+		`${emblemRows[2]} ${muted("Model  ")} ${bright(modelLabel)}`,
+		`${emblemRows[3]} ${muted("Output ")} ${rgbFg(110, 242, 184, reportRel)} ${dim("(isolated per target)")}`,
+		divider,
+		`  ${bright("Drop any file path or ask in plain English:")}  ${dim('"What is /path/to/app?"')}`,
+		`  ${cmdPill("/start <path>")} ${dim("•")} ${cmdPill("/status")} ${dim("•")} ${cmdPill("/triage")} ${dim("•")} ${cmdPill("/trace")} ${dim("•")} ${cmdPill("/audit")} ${dim("•")} ${cmdPill("/clone-spec")} ${dim("•")} ${cmdPill("/ledger")} ${dim("•")} ${cmdPill("/exit")}`,
+	];
+
+	return lines.map((l) => truncateVisible(l, safeWidth));
 }
 
 export interface WoodchipperStatusInput {
@@ -1078,80 +1138,70 @@ export interface WoodchipperStatusInput {
 
 /**
  * Render width-safe lines for the compact, two-column Woodchipper `/status` TUI card
- * (`pi.registerMessageRenderer("woodchipper-status", ...)`).
+ * (`pi.registerMessageRenderer("woodchipper-status", ...)`) using wide-gamut truecolor pills and bars.
  */
 export function renderWoodchipperStatusCardLines(
 	width: number,
 	info: WoodchipperStatusInput,
-	theme?: {
+	_theme?: {
 		fg?: (color: string, text: string) => string;
 		bold?: (text: string) => string;
 	},
 ): string[] {
-	const safeWidth = Math.max(50, width || 86);
-	const innerWidth = Math.max(44, Math.min(safeWidth - 4, 92));
-	const labelColWidth = 15;
-	const valueColWidth = innerWidth - labelColWidth;
+	const safeWidth = Math.max(54, width || 88);
+	const ruleWidth = Math.min(safeWidth - 2, 84);
+	const labelWidth = 16;
 
-	const fg = (color: string, text: string) => (theme?.fg ? theme.fg(color, text) : text);
-	const bold = (text: string) => (theme?.bold ? theme.bold(text) : text);
+	const muted = (t: string) => rgbFg(142, 150, 170, t);
+	const bright = (t: string) => rgbFg(238, 242, 252, t);
+	const dim = (t: string) => rgbFg(108, 116, 138, t);
 
-	const padRight = (text: string, targetLen: number): string => {
-		const clipped = text.length > targetLen ? `${text.slice(0, targetLen - 1)}…` : text;
-		return `${clipped}${" ".repeat(Math.max(0, targetLen - clipped.length))}`;
-	};
+	const padLabel = (label: string) => `  ${muted(label.padEnd(labelWidth))}`;
+	const sectionTitle = (title: string) =>
+		`  ${gradientText(`▸ ${title}`, [[255, 62, 108], [185, 82, 245], [0, 210, 255]])}`;
 
-	const topTitle = " Woodchipper Status ";
-	const topDashCount = Math.max(2, innerWidth + 2 - topTitle.length);
-	const topBorder = fg("accent", `╭─${bold(topTitle)}${"─".repeat(topDashCount - 1)}╮`);
-	const bottomBorder = fg("accent", `╰${"─".repeat(innerWidth + 2)}╯`);
+	const onlinePill = info.maximalReachable
+		? rgbPill(18, 92, 62, 140, 255, 200, "ONLINE")
+		: rgbPill(110, 62, 18, 255, 210, 140, "FALLBACK");
+	const copilotPill = info.copilotReady
+		? ` ${rgbPill(24, 58, 96, 120, 215, 255, `MAXIMAL v${info.maximalVersion ?? "0.4"} • COPILOT`)}`
+		: "";
+	const thinkingPill = rgbPill(58, 32, 86, 224, 168, 255, `THINKING: ${(info.thinkingLevel ?? "high").toUpperCase()}`);
 
-	const emptyRow = () => `${fg("accent", "│")} ${" ".repeat(innerWidth)} ${fg("accent", "│")}`;
-	const sectionHeader = (title: string) => {
-		const padded = padRight(title, innerWidth);
-		return `${fg("accent", "│")} ${fg("accent", bold(padded))} ${fg("accent", "│")}`;
-	};
-	const kvRow = (label: string, value: string, valueTone?: "muted" | "dim" | "success" | "warning") => {
-		const lCell = fg("muted", padRight(label, labelColWidth));
-		const vRaw = padRight(value, valueColWidth);
-		const vCell = valueTone ? fg(valueTone, vRaw) : vRaw;
-		return `${fg("accent", "│")} ${lCell}${vCell} ${fg("accent", "│")}`;
-	};
-
-	// Build visual context-window progress bar
-	let contextVal = "0 tokens used";
+	// Build wide-gamut truecolor context-window progress bar
+	let contextRow = `${padLabel("Context Usage")}${dim("━".repeat(16))}  ${muted("0 tokens used")}`;
 	if (typeof info.contextTokens === "number" && typeof info.contextWindow === "number" && info.contextWindow > 0) {
 		const pct = info.contextPercent ?? (info.contextTokens / info.contextWindow) * 100;
-		const barSlots = 12;
-		const filled = Math.max(0, Math.min(barSlots, Math.round((pct / 100) * barSlots)));
-		const bar = `[${"█".repeat(filled)}${"░".repeat(barSlots - filled)}]`;
-		contextVal = `${bar} ${info.contextTokens.toLocaleString()} / ${info.contextWindow.toLocaleString()} tokens (${pct.toFixed(1)}%)`;
+		const barSlots = 16;
+		const filled = Math.max(1, Math.min(barSlots, Math.round((pct / 100) * barSlots)));
+		const filledBar = gradientText("━".repeat(filled), [[0, 210, 255], [214, 51, 182], [255, 30, 86]]);
+		const emptyBar = dim("─".repeat(barSlots - filled));
+		contextRow = `${padLabel("Context Usage")}${filledBar}${emptyBar}  ${bright(`${info.contextTokens.toLocaleString()} / ${info.contextWindow.toLocaleString()} tokens`)} ${muted(`(${pct.toFixed(1)}%)`)}`;
 	} else if (typeof info.contextWindow === "number" && info.contextWindow > 0) {
-		contextVal = `[░░░░░░░░░░░░] 0 / ${info.contextWindow.toLocaleString()} tokens`;
+		contextRow = `${padLabel("Context Usage")}${dim("─".repeat(16))}  ${muted(`0 / ${info.contextWindow.toLocaleString()} tokens`)}`;
 	}
-
-	const endpointBadge = info.maximalReachable
-		? `ONLINE${info.maximalVersion ? ` • maximal v${info.maximalVersion}` : ""}${info.copilotReady ? " • Copilot ready" : ""}`
-		: `OFFLINE • ${info.maximalSource}`;
 
 	const compactFailover = info.failoverChain
 		.slice(0, 4)
 		.map((m) => m.replace(/-202\d+$/, ""))
-		.join(" → ");
+		.join(dim(" → "));
+
+	const topBar = `  ${rgbPill(255, 30, 86, 255, 255, 255, "WOODCHIPPER STATUS")} ${rgbPill(32, 40, 58, 190, 205, 230, info.mode.toUpperCase())} ${dim(`PID ${info.pid}`)}`;
+	const divider = `  ${gradientText("─".repeat(ruleWidth), [[255, 30, 86], [148, 82, 235], [0, 210, 255]])}`;
 
 	const rows: string[] = [
-		topBorder,
-		sectionHeader("SESSION & RUNTIME"),
-		kvRow("Working Dir", info.cwd),
-		kvRow("Mode / PID", `${info.mode} (PID ${info.pid})`, "muted"),
-		kvRow("Peer Socket", `/tmp/cc-socks/${info.pid}.sock`, "muted"),
-		kvRow("Output Dir", `workspaces/${info.workspaceSlug}/  (REPORT.md • TRIAGE_MAP.md)`),
-		emptyRow(),
-		sectionHeader("ACTIVE MODEL & PROVIDER"),
-		kvRow("Active Model", `${info.activeProvider}/${info.activeModelId}  (thinking: ${info.thinkingLevel ?? "high"})`),
-		kvRow("Endpoint", `${info.maximalBaseUrl}  [${endpointBadge}]`, info.maximalReachable ? "success" : "warning"),
-		kvRow("Context Usage", contextVal),
-		kvRow("Failover", compactFailover, "dim"),
+		topBar,
+		divider,
+		sectionTitle("SESSION & RUNTIME"),
+		`${padLabel("Working Dir")}${bright(info.cwd)}`,
+		`${padLabel("Output Dir")}${rgbFg(110, 242, 184, `workspaces/${info.workspaceSlug}/`)}  ${dim("(REPORT.md • TRIAGE_MAP.md)")}`,
+		`${padLabel("Peer Socket")}${muted(`/tmp/cc-socks/${info.pid}.sock`)}`,
+		"",
+		sectionTitle("ACTIVE MODEL & PROVIDER"),
+		`${padLabel("Active Model")}${bright(`${info.activeProvider}/${info.activeModelId}`)}  ${thinkingPill}`,
+		`${padLabel("Endpoint")}${bright(info.maximalBaseUrl)}  ${onlinePill}${copilotPill}`,
+		contextRow,
+		`${padLabel("Failover Chain")}${muted(compactFailover)}`,
 	];
 
 	const hasActiveWork =
@@ -1162,24 +1212,21 @@ export function renderWoodchipperStatusCardLines(
 
 	if (hasActiveWork) {
 		rows.push(
-			emptyRow(),
-			sectionHeader("ACTIVE TARGET"),
-			kvRow("Target", info.targetPath ?? "workspace active"),
-			kvRow(
-				"Ledger",
-				`${info.ledgerCounts.observations} obs • ${info.ledgerCounts.inferences} inf • ${info.ledgerCounts.unresolvedUnknowns} open unknowns (${info.ledgerCounts.evidenceIds} ev_*)`,
-				"muted",
-			),
+			"",
+			sectionTitle("ACTIVE TARGET"),
+			`${padLabel("Target")}${bright(info.targetPath ?? "workspace active")}`,
+			`${padLabel("Evidence")}${rgbFg(110, 242, 184, `${info.ledgerCounts.observations} obs`)} ${dim("•")} ${rgbFg(96, 218, 255, `${info.ledgerCounts.inferences} inf`)} ${dim("•")} ${rgbFg(255, 196, 112, `${info.ledgerCounts.unresolvedUnknowns} open unknowns`)} ${dim(`(${info.ledgerCounts.evidenceIds} ev_*)`)}`,
 		);
 	}
 
-	rows.push(bottomBorder);
-	return rows;
+	rows.push(divider);
+	return rows.map((r) => truncateVisible(r, safeWidth));
 }
 
 /**
- * Format the compact Woodchipper `/status` card as a string.
+ * Format the compact Woodchipper `/status` card as a plain-text string (while TUI uses
+ * `renderWoodchipperStatusCardLines` via `pi.registerMessageRenderer` with 24-bit truecolor).
  */
 export function formatWoodchipperStatusDashboard(info: WoodchipperStatusInput): string {
-	return renderWoodchipperStatusCardLines(88, info).join("\n");
+	return stripAnsi(renderWoodchipperStatusCardLines(88, info).join("\n"));
 }
