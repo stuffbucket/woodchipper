@@ -66,6 +66,7 @@ test('MCP and runtime hooks remain owned by project-local Pi configuration', () 
   const piSettings = JSON.parse(fs.readFileSync(path.join(ROOT, '.pi', 'settings.json'), 'utf8'))
   assert.equal(piSettings.defaultProvider, 'maximal')
   assert.equal(piSettings.defaultModel, 'claude-sonnet-5-5-20260301')
+  assert.equal(piSettings.quietStartup, true)
   assert.ok(piSettings.extensions.includes('./extensions/woodchipper-maximal.ts'))
   assert.ok(piSettings.extensions.includes('./extensions/woodchipper-rea.ts'))
 

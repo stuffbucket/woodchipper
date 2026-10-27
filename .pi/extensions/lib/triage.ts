@@ -30,18 +30,25 @@ export function resolveReaProviderEnv(
 	if (!env.GHIDRA_HEADLESS_MAXMEM) {
 		env.GHIDRA_HEADLESS_MAXMEM = "4G";
 	}
+	// Suppress Pi's upstream npm version/update check so the TUI never nags about Pi updates
+	env.PI_SKIP_VERSION_CHECK = "1";
 	if (projectRoot) {
 		const runtimeDir = path.join(projectRoot, "workspaces", ".rea-runtime");
+		const piAgentDir = path.join(projectRoot, "workspaces", ".pi-agent");
 		try {
 			fs.mkdirSync(path.join(runtimeDir, "cache"), { recursive: true });
 			fs.mkdirSync(path.join(runtimeDir, "data"), { recursive: true });
 			fs.mkdirSync(path.join(runtimeDir, "state"), { recursive: true });
+			fs.mkdirSync(piAgentDir, { recursive: true });
 		} catch {
 			// Ignore on read-only filesystems
 		}
 		env.XDG_CACHE_HOME = path.join(runtimeDir, "cache");
 		env.XDG_DATA_HOME = path.join(runtimeDir, "data");
 		env.XDG_STATE_HOME = path.join(runtimeDir, "state");
+		if (!env.PI_CODING_AGENT_DIR) {
+			env.PI_CODING_AGENT_DIR = piAgentDir;
+		}
 	}
 	return env;
 }
