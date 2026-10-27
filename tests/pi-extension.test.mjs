@@ -12,7 +12,11 @@ import woodchipperReaExtension, {
 	isReaTool,
 	normalizeReaToolInput,
 } from "../.pi/extensions/woodchipper-rea.ts";
-import { EvidenceLedger } from "../.pi/extensions/lib/evidence-ledger.ts";
+import {
+	EvidenceLedger,
+	ensureWorkspacesRootGitignored,
+	listExistingWorkspaces,
+} from "../.pi/extensions/lib/evidence-ledger.ts";
 import {
 	assessExpertiseAndMethodologyFeedback,
 	classifyBinarySignals,
@@ -29,7 +33,11 @@ import {
 	runReaDoctorSummary,
 	runStaticTriage,
 } from "../.pi/extensions/lib/triage.ts";
-import { buildWoodchipperPiArgs } from "../bin/woodchipper.mjs";
+import {
+	buildWoodchipperPiArgs,
+	extractWorkspaceCliFlag,
+	initializeActiveWorkspace,
+} from "../bin/woodchipper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -687,7 +695,22 @@ test("workspaces isolate findings per target and never leak into global XDG or ~
 			const visLen = stripAnsi(line).length;
 			assert.ok(visLen <= 90, `Header line exceeded visible width 90: ${visLen}`);
 		}
+
+		// 8. Verify up-front workspace initialization and workspaces/.gitignore guard
+		const wsRoot = ensureWorkspacesRootGitignored(tmpRoot);
+		const innerGitignore = fs.readFileSync(path.join(wsRoot, ".gitignore"), "utf8");
+		assert.match(innerGitignore, /^\*$/m, "Expected workspaces/.gitignore to ignore all files (*)");
+
+		const parsedFlags = extractWorkspaceCliFlag(["-w", "router-audit", "--no-peer"]);
+		assert.equal(parsedFlags.workspaceArg, "router-audit");
+		assert.deepEqual(parsedFlags.remainingArgs, ["--no-peer"]);
+
+		const initWs = initializeActiveWorkspace("router-audit", tmpRoot);
+		assert.equal(initWs.slug, "router-audit");
+		assert.ok(fs.existsSync(initWs.sessionDir));
+		assert.ok(listExistingWorkspaces(tmpRoot).includes("router-audit"));
 	} finally {
+		delete process.env.WOODCHIPPER_WORKSPACE;
 		fs.rmSync(tmpRoot, { recursive: true, force: true });
 	}
 });
