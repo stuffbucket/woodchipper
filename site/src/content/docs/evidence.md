@@ -47,11 +47,23 @@ Next check: capture one authorized export and correlate the filesystem write wit
 A useful unknown includes the next check. It should not be a general statement that more work is
 possible.
 
-## Summary-first analysis
+## Summary-first analysis and context protection
 
-Large inspections return a summary and a parent evidence ID. Woodchipper then reads only the pages
-needed for the current question. This applies to large JavaScript applications, binary layouts,
-Mach-O files, managed assemblies, WASM artifacts, and web captures.
+Large inspections return a summary and a parent evidence ID (`ev_...`). Woodchipper then reads only the pages
+needed for the current question via `inspect_analysis_view`. This applies across all 14 `detail`-capable REA `6.7.0` tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_macho`, `inspect_artifact`, `inspect_managed_artifact`, `inspect_managed_members`, `inspect_wasm_artifact`, `inspect_web_network_capture`, `decode_interface_builder`, `inspect_evm_interface`, `inspect_android_package`, `inspect_pcap_capture`, `inspect_dart_aot`, and `get_evidence_bundle`).
+
+Oversized tool results (>32,000 characters) have their `ev_*` IDs scraped into the workspace ledger first and are automatically capped with a retained-evidence paging hint. During automatic context compaction, Woodchipper preserves all `ev_*` receipts, virtual addresses, and unresolved unknowns via a persistent workspace Evidence Anchor.
+
+## Isolated per-target workspaces (`workspaces/<slug>/`)
+
+Every target or named investigation receives its own git-ignored directory under `workspaces/<slug>/` (configured up front on launch or switched via `/workspace <name>`):
+
+- `workspaces/<slug>/REPORT.md` — human-readable Three-Bucket Evidence Report updated automatically as findings are recorded;
+- `workspaces/<slug>/TRIAGE_MAP.md` — target-free static reconnaissance summary;
+- `workspaces/<slug>/evidence-ledger.json` — structured JSON ledger;
+- `workspaces/<slug>/sessions/` — isolated Pi session transcripts (never written to global `~/.pi/agent/sessions`).
+
+Both the repository `.gitignore` and `workspaces/.gitignore` (`*`) ignore all workspace contents so reverse-engineering artifacts and reports are never committed to Git.
 
 ## Report checklist
 

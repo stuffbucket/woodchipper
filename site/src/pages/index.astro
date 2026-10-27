@@ -76,25 +76,22 @@ const docs = [
     <section class="section">
       <div class="section-head">
         <h2>First run</h2>
-        <p>Docker with Buildx is required during setup. Analysis runs from the project-local Pi harness. It does not add global Claude Code hooks or MCP settings.</p>
+        <p>Launch in a single command. Woodchipper prompts for an isolated, git-ignored workspace under <code>workspaces/&lt;name&gt;/</code> and writes <code>REPORT.md</code> and <code>TRIAGE_MAP.md</code> there as you work.</p>
       </div>
       <div class="install-grid">
         <div class="step">
-          <h3>1. Build and check</h3>
-          <p>Install the pinned dependencies, build the local harness, and check REA and Ghidra.</p>
+          <h3>1. Clone and launch</h3>
+          <p><code>./woodchipper</code> trusts <code>mise.toml</code>, runs first-time setup if needed, and asks for your workspace or target path up front.</p>
         </div>
         <div class="step">
-          <h3>2. Open the TUI</h3>
-          <p>Run a triage command. Add a feature or security question after the first summary.</p>
+          <h3>2. Ask in plain English or use commands</h3>
+          <p>Drop a target path or run <code>/start /path/to/target</code>, <code>/triage</code>, <code>/status</code>, <code>/clear</code>, or <code>/exit</code>.</p>
         </div>
       </div>
       <pre class="command"><code><span class="prompt">$</span> git clone https://github.com/stuffbucket/woodchipper.git
 <span class="prompt">$</span> cd woodchipper
-<span class="prompt">$</span> mise trust
-<span class="prompt">$</span> mise run setup
-<span class="prompt">$</span> mise run doctor
-<span class="prompt">$</span> mise run tui
-<span class="prompt">/</span>triage /path/to/target</code></pre>
+<span class="prompt">$</span> ./woodchipper
+<span class="prompt">/</span>start /path/to/target</code></pre>
     </section>
 
     <section class="section">
