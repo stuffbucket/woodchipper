@@ -1077,61 +1077,109 @@ export interface WoodchipperStatusInput {
 }
 
 /**
- * Format a comprehensive Claude-Code-style `/status` operational dashboard.
+ * Render width-safe lines for the compact, two-column Woodchipper `/status` TUI card
+ * (`pi.registerMessageRenderer("woodchipper-status", ...)`).
  */
-export function formatWoodchipperStatusDashboard(info: WoodchipperStatusInput): string {
-	const contextStr =
-		typeof info.contextTokens === "number" && typeof info.contextWindow === "number" && info.contextWindow > 0
-			? `${info.contextTokens.toLocaleString()} / ${info.contextWindow.toLocaleString()} tokens (${(info.contextPercent ?? (info.contextTokens / info.contextWindow) * 100).toFixed(1)}%)`
-			: info.contextWindow
-				? `0 / ${info.contextWindow.toLocaleString()} tokens`
-				: "N/A (no turn completed yet)";
+export function renderWoodchipperStatusCardLines(
+	width: number,
+	info: WoodchipperStatusInput,
+	theme?: {
+		fg?: (color: string, text: string) => string;
+		bold?: (text: string) => string;
+	},
+): string[] {
+	const safeWidth = Math.max(50, width || 86);
+	const innerWidth = Math.max(44, Math.min(safeWidth - 4, 92));
+	const labelColWidth = 15;
+	const valueColWidth = innerWidth - labelColWidth;
 
-	const lines: string[] = [
-		"# Woodchipper Operational Status (`/status`)",
-		"",
-		"## 1. Where Woodchipper Is Running (Session & Runtime)",
-		`- **Project Root:** \`${info.projectRoot}\``,
-		`- **Working Directory (\`cwd\`):** \`${info.cwd}\``,
-		`- **Run Mode & PID:** \`${info.mode}\` (PID \`${info.pid}\`)`,
-		`- **Session Transcript:** \`${info.sessionFile ?? path.join(info.workspaceDir, "sessions")}\``,
-		`- **Claude Code A2A Peer Socket:** \`/tmp/cc-socks/${info.pid}.sock\` (registry: \`~/.claude/sessions/${info.pid}.json\`)`,
-		"",
-		"## 2. Where the Model Is Pulled From (`maximal` Provider)",
-		`- **Active Model:** \`${info.activeProvider}/${info.activeModelId}\` (thinking level: \`${info.thinkingLevel ?? "high"}\`)`,
-		`- **Provider Endpoint:** \`${info.maximalBaseUrl}\` (${info.maximalReachable ? "ONLINE" : "OFFLINE — using fallback catalog"}, catalog: \`${info.maximalSource}\`)`,
-		...(info.maximalVersion
-			? [
-					`- **Upstream Proxy:** \`maximal v${info.maximalVersion}\` (Copilot ready: \`${Boolean(info.copilotReady)}\`${info.copilotAccountType ? `, account: \`${info.copilotAccountType}\`` : ""}, auth: \`${info.apiKeySource}\`)`,
-				]
-			: [`- **Auth Key Source:** \`${info.apiKeySource}\``]),
-		`- **Context Window Usage:** ${contextStr}`,
-		`- **Automatic Refusal Failover Chain:** ${info.failoverChain.map((m) => `\`${m}\``).join(" -> ")}`,
-		"",
-		"## 3. Current Work & Investigation Purpose",
-		`- **Active Target Artifact:** ${info.targetPath ? `\`${info.targetPath}\`` : "_None selected yet (drop a file path or run `/start <path>`)_"}`,
-		...(info.targetPath && info.targetFileDescription
-			? [
-					`- **Target Fingerprint:** ${info.targetFileDescription} • Size: ${info.targetSizeHuman ?? "?"} • SHA-256: \`${info.targetSha256 ?? "N/A (directory)"}\``,
-				]
-			: []),
-		`- **Active Playbook & Sub-Skill:** Playbook \`${info.recommendedPlaybook}\` • Sub-Skill \`${info.recommendedSubSkill}\``,
-		`- **Calibrated Operator Mode:** \`${info.expertiseLevel}\``,
-		`- **Current Goal / Last Prompt:** ${info.lastUserPrompt ? `"${info.lastUserPrompt.slice(0, 160)}${info.lastUserPrompt.length > 160 ? "…" : ""}"` : "_Waiting for first prompt_"}`,
-		"",
-		"## 4. Where Output Goes (Isolated Per-Target Workspace)",
-		`- **Workspace Directory:** \`${info.workspaceDir}\` (\`${info.workspaceSlug}\` — isolated from all other projects)`,
-		`- **Human-Readable Report:** \`${info.reportPath}\``,
-		`- **Static Triage Map:** \`${info.triageMapPath}\``,
-		`- **Structured Evidence Ledger:** \`${info.ledgerPath}\``,
-		"",
-		"## 5. Important Input & Evidence State",
-		`- **Captured REA Evidence Receipts (\`ev_*\`):** ${info.ledgerCounts.evidenceIds}`,
-		`- **Verified Observations:** ${info.ledgerCounts.observations}`,
-		`- **Recorded Inferences:** ${info.ledgerCounts.inferences}`,
-		`- **Open Unknowns:** ${info.ledgerCounts.unresolvedUnknowns} unresolved (${info.ledgerCounts.unknowns} total)`,
-		`- **GLiNER Intent/Signal Classifier (\`${info.glinerModelId}\`):** model installed=\`${info.glinerInstalled}\`, runner available=\`${info.glinerRunnerAvailable}\` (\`${info.glinerModelsDir}\`)`,
+	const fg = (color: string, text: string) => (theme?.fg ? theme.fg(color, text) : text);
+	const bold = (text: string) => (theme?.bold ? theme.bold(text) : text);
+
+	const padRight = (text: string, targetLen: number): string => {
+		const clipped = text.length > targetLen ? `${text.slice(0, targetLen - 1)}…` : text;
+		return `${clipped}${" ".repeat(Math.max(0, targetLen - clipped.length))}`;
+	};
+
+	const topTitle = " Woodchipper Status ";
+	const topDashCount = Math.max(2, innerWidth + 2 - topTitle.length);
+	const topBorder = fg("accent", `╭─${bold(topTitle)}${"─".repeat(topDashCount - 1)}╮`);
+	const bottomBorder = fg("accent", `╰${"─".repeat(innerWidth + 2)}╯`);
+
+	const emptyRow = () => `${fg("accent", "│")} ${" ".repeat(innerWidth)} ${fg("accent", "│")}`;
+	const sectionHeader = (title: string) => {
+		const padded = padRight(title, innerWidth);
+		return `${fg("accent", "│")} ${fg("accent", bold(padded))} ${fg("accent", "│")}`;
+	};
+	const kvRow = (label: string, value: string, valueTone?: "muted" | "dim" | "success" | "warning") => {
+		const lCell = fg("muted", padRight(label, labelColWidth));
+		const vRaw = padRight(value, valueColWidth);
+		const vCell = valueTone ? fg(valueTone, vRaw) : vRaw;
+		return `${fg("accent", "│")} ${lCell}${vCell} ${fg("accent", "│")}`;
+	};
+
+	// Build visual context-window progress bar
+	let contextVal = "0 tokens used";
+	if (typeof info.contextTokens === "number" && typeof info.contextWindow === "number" && info.contextWindow > 0) {
+		const pct = info.contextPercent ?? (info.contextTokens / info.contextWindow) * 100;
+		const barSlots = 12;
+		const filled = Math.max(0, Math.min(barSlots, Math.round((pct / 100) * barSlots)));
+		const bar = `[${"█".repeat(filled)}${"░".repeat(barSlots - filled)}]`;
+		contextVal = `${bar} ${info.contextTokens.toLocaleString()} / ${info.contextWindow.toLocaleString()} tokens (${pct.toFixed(1)}%)`;
+	} else if (typeof info.contextWindow === "number" && info.contextWindow > 0) {
+		contextVal = `[░░░░░░░░░░░░] 0 / ${info.contextWindow.toLocaleString()} tokens`;
+	}
+
+	const endpointBadge = info.maximalReachable
+		? `ONLINE${info.maximalVersion ? ` • maximal v${info.maximalVersion}` : ""}${info.copilotReady ? " • Copilot ready" : ""}`
+		: `OFFLINE • ${info.maximalSource}`;
+
+	const compactFailover = info.failoverChain
+		.slice(0, 4)
+		.map((m) => m.replace(/-202\d+$/, ""))
+		.join(" → ");
+
+	const rows: string[] = [
+		topBorder,
+		sectionHeader("SESSION & RUNTIME"),
+		kvRow("Working Dir", info.cwd),
+		kvRow("Mode / PID", `${info.mode} (PID ${info.pid})`, "muted"),
+		kvRow("Peer Socket", `/tmp/cc-socks/${info.pid}.sock`, "muted"),
+		kvRow("Output Dir", `workspaces/${info.workspaceSlug}/  (REPORT.md • TRIAGE_MAP.md)`),
+		emptyRow(),
+		sectionHeader("ACTIVE MODEL & PROVIDER"),
+		kvRow("Active Model", `${info.activeProvider}/${info.activeModelId}  (thinking: ${info.thinkingLevel ?? "high"})`),
+		kvRow("Endpoint", `${info.maximalBaseUrl}  [${endpointBadge}]`, info.maximalReachable ? "success" : "warning"),
+		kvRow("Context Usage", contextVal),
+		kvRow("Failover", compactFailover, "dim"),
 	];
 
-	return lines.join("\n");
+	const hasActiveWork =
+		Boolean(info.targetPath) ||
+		info.ledgerCounts.observations > 0 ||
+		info.ledgerCounts.inferences > 0 ||
+		info.ledgerCounts.unresolvedUnknowns > 0;
+
+	if (hasActiveWork) {
+		rows.push(
+			emptyRow(),
+			sectionHeader("ACTIVE TARGET"),
+			kvRow("Target", info.targetPath ?? "workspace active"),
+			kvRow(
+				"Ledger",
+				`${info.ledgerCounts.observations} obs • ${info.ledgerCounts.inferences} inf • ${info.ledgerCounts.unresolvedUnknowns} open unknowns (${info.ledgerCounts.evidenceIds} ev_*)`,
+				"muted",
+			),
+		);
+	}
+
+	rows.push(bottomBorder);
+	return rows;
+}
+
+/**
+ * Format the compact Woodchipper `/status` card as a string.
+ */
+export function formatWoodchipperStatusDashboard(info: WoodchipperStatusInput): string {
+	return renderWoodchipperStatusCardLines(88, info).join("\n");
 }
