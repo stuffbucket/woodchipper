@@ -51,22 +51,86 @@ export interface EvidenceLedgerData {
 
 /**
  * Derive a human-readable, collision-resistant workspace directory name for a target path
- * so separate reverse-engineering projects never commingle state or leak into global XDG directories.
+ * or named workspace so separate reverse-engineering projects never commingle state.
+ * - If given a plain workspace name (no path separators and not an existing file on disk),
+ *   uses the sanitized slug directly (e.g. "router-audit").
+ * - If given a file/directory path, appends an 8-char SHA-256 of the resolved path.
  */
 export function deriveWorkspaceSlug(targetPathOrName?: string): string {
 	const raw = (targetPathOrName ?? "").trim();
 	if (!raw || raw === "default") {
 		return "default";
 	}
+	const isPlainWorkspaceName =
+		!raw.includes("/") && !raw.includes("\\") && !fs.existsSync(path.resolve(raw));
+	if (isPlainWorkspaceName) {
+		return (
+			raw
+				.toLowerCase()
+				.replace(/[^a-z0-9._-]+/g, "-")
+				.replace(/^-+|-+$/g, "")
+				.slice(0, 48) || "default"
+		);
+	}
 	const resolved = path.resolve(raw);
-	const base = path
-		.basename(resolved)
-		.toLowerCase()
-		.replace(/[^a-z0-9._-]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 40) || "target";
+	const base =
+		path
+			.basename(resolved)
+			.toLowerCase()
+			.replace(/[^a-z0-9._-]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.slice(0, 40) || "target";
 	const shortHash = crypto.createHash("sha256").update(resolved).digest("hex").slice(0, 8);
 	return `${base}-${shortHash}`;
+}
+
+/**
+ * Ensure `workspaces/` exists and contains a local `.gitignore` (`*`) so reverse-engineering
+ * artifacts and reports inside `workspaces/` can never be accidentally staged or committed.
+ */
+export function ensureWorkspacesRootGitignored(projectRoot: string): string {
+	const workspacesRoot = path.join(projectRoot, "workspaces");
+	try {
+		fs.mkdirSync(workspacesRoot, { recursive: true });
+		const gitignorePath = path.join(workspacesRoot, ".gitignore");
+		if (!fs.existsSync(gitignorePath)) {
+			fs.writeFileSync(
+				gitignorePath,
+				"# Never commit reverse-engineering workspaces, targets, or reports\n*\n",
+				"utf8",
+			);
+		}
+	} catch {
+		// Ignore on read-only filesystems
+	}
+	return workspacesRoot;
+}
+
+/**
+ * List existing workspace slugs in `<projectRoot>/workspaces/`, most recently modified first.
+ */
+export function listExistingWorkspaces(projectRoot: string): string[] {
+	const workspacesRoot = path.join(projectRoot, "workspaces");
+	if (!fs.existsSync(workspacesRoot)) return [];
+	try {
+		return fs
+			.readdirSync(workspacesRoot, { withFileTypes: true })
+			.filter((d) => d.isDirectory() && !d.name.startsWith("."))
+			.map((d) => {
+				const full = path.join(workspacesRoot, d.name);
+				let mtimeMs = 0;
+				try {
+					mtimeMs = fs.statSync(full).mtimeMs;
+				} catch {
+					// Ignore
+				}
+				return { name: d.name, mtimeMs };
+			})
+			.sort((a, b) => b.mtimeMs - a.mtimeMs)
+			.map((item) => item.name);
+	} catch {
+		return [];
+	}
 }
 
 function createEmptyLedger(workspaceSlug: string, targetPath?: string): EvidenceLedgerData {
@@ -131,8 +195,12 @@ export class EvidenceLedger {
 		triageMapPath: string;
 		ledgerPath: string;
 	} {
-		const resolved = path.resolve(this.projectRoot, targetPath);
-		const nextSlug = deriveWorkspaceSlug(resolved);
+		const isPath =
+			targetPath.includes("/") ||
+			targetPath.includes("\\") ||
+			fs.existsSync(path.resolve(this.projectRoot, targetPath));
+		const resolved = isPath ? path.resolve(this.projectRoot, targetPath) : undefined;
+		const nextSlug = deriveWorkspaceSlug(resolved ?? targetPath);
 		this.workspaceSlug = nextSlug;
 		this.targetPath = resolved;
 		this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
@@ -140,10 +208,12 @@ export class EvidenceLedger {
 		this.reportPath = path.join(this.workspaceDir, "REPORT.md");
 		this.triageMapPath = path.join(this.workspaceDir, "TRIAGE_MAP.md");
 		this.data = this.loadFromDisk();
-		this.data.targetPath = resolved;
+		if (resolved) {
+			this.data.targetPath = resolved;
+		}
 		try {
-			const workspacesRoot = path.join(this.projectRoot, "workspaces");
-			fs.mkdirSync(workspacesRoot, { recursive: true });
+			const workspacesRoot = ensureWorkspacesRootGitignored(this.projectRoot);
+			fs.mkdirSync(this.workspaceDir, { recursive: true });
 			fs.writeFileSync(path.join(workspacesRoot, "ACTIVE_WORKSPACE"), `${this.workspaceSlug}\n`, "utf8");
 		} catch {
 			// Ignore on read-only filesystem
@@ -226,6 +296,7 @@ export class EvidenceLedger {
 			if (this.targetPath) {
 				this.data.targetPath = this.targetPath;
 			}
+			ensureWorkspacesRootGitignored(this.projectRoot);
 			fs.mkdirSync(this.workspaceDir, { recursive: true });
 			const tmpPath = `${this.ledgerPath}.${process.pid}.tmp`;
 			fs.writeFileSync(tmpPath, `${JSON.stringify(this.data, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });

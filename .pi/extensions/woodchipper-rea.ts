@@ -9,7 +9,12 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { type ConfidenceLevel, EvidenceLedger } from "./lib/evidence-ledger.ts";
+import {
+	type ConfidenceLevel,
+	EvidenceLedger,
+	ensureWorkspacesRootGitignored,
+	listExistingWorkspaces,
+} from "./lib/evidence-ledger.ts";
 import {
 	assessExpertiseAndMethodologyFeedback,
 	classifyBinarySignals,
@@ -389,6 +394,7 @@ export const DIRECT_REA_TOOL_EXPOSURE: Readonly<Record<string, "direct">> = {
 
 export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	const projectRoot = resolveProjectRoot();
+	ensureWorkspacesRootGitignored(projectRoot);
 	const ledger = new EvidenceLedger(projectRoot);
 	let lastUserPromptSeen = "";
 	let lastPlaybookSeen = "triage-and-feature-trace";
@@ -1102,6 +1108,56 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 					"info",
 				);
 			}
+		},
+	});
+
+	pi.registerCommand("workspace", {
+		description:
+			"Show, list, or switch the active git-ignored reverse-engineering workspace (`workspaces/<slug>/`): /workspace [name-or-path|list]",
+		handler: async (args, ctx) => {
+			const trimmed = args.trim();
+			const existing = listExistingWorkspaces(projectRoot);
+			if (!trimmed || trimmed.toLowerCase() === "list") {
+				ledger.reload();
+				const lines = [
+					`# Active Workspace: \`workspaces/${ledger.getWorkspaceSlug()}/\` (Git-Ignored)`,
+					`- **Workspace Folder:** \`${ledger.getWorkspaceDir()}\``,
+					`- **Report File:** \`${ledger.getReportPath()}\``,
+					`- **Triage Map File:** \`${ledger.getTriageMapPath()}\``,
+					`- **Ledger JSON:** \`${ledger.getLedgerPath()}\``,
+					"",
+					"## Existing Workspaces in `workspaces/`",
+					...(existing.length > 0
+						? existing.map((w) => `- \`workspaces/${w}/\`${w === ledger.getWorkspaceSlug() ? " **(active)**" : ""}`)
+						: ["_No workspaces created yet._"]),
+					"",
+					"_Switch workspaces anytime via `/workspace <name-or-target-path>`._",
+				];
+				pi.sendMessage(
+					{
+						customType: "woodchipper-workspace",
+						content: lines.join("\n"),
+						display: true,
+					},
+					{ triggerTurn: false },
+				);
+				return;
+			}
+
+			const info = ledger.setTargetWorkspace(trimmed);
+			ledger.saveToDisk();
+			if (ctx?.hasUI) {
+				ctx.ui.notify(`Switched active workspace to workspaces/${info.workspaceSlug}/ (git-ignored)`, "info");
+			}
+			pi.sendMessage(
+				{
+					customType: "woodchipper-workspace",
+					content: `Switched active workspace to **\`workspaces/${info.workspaceSlug}/\`** (\`${info.reportPath}\`).`,
+					display: true,
+					details: info,
+				},
+				{ triggerTurn: false },
+			);
 		},
 	});
 

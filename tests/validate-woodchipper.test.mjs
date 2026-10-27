@@ -113,6 +113,7 @@ test('temporary proxy-gap packages stay isolated as Docker-built submodule overr
 
   const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8')
   assert.match(gitignore, /^vendor\/overrides\/packages\/$/m)
+  assert.match(gitignore, /^workspaces\/$/m, 'Expected workspaces/ to be gitignored so RE artifacts are never committed')
 })
 
 test('Pi build uses a separate exact audit overlay without modifying the submodule', () => {

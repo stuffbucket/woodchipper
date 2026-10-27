@@ -69,7 +69,13 @@ for (const wf of workflowFiles) {
   ok(`Workflow ${wf}`)
 }
 
-// 3. Enforce the Pi-owned configuration boundary
+// 3. Enforce the Pi-owned configuration boundary and gitignored workspaces/
+const gitignoreText = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8')
+if (!/^workspaces\/$/m.test(gitignoreText)) {
+  fail('.gitignore must ignore workspaces/ so reverse-engineering work is never committed')
+} else {
+  ok('Workspace isolation: workspaces/ is gitignored')
+}
 const forbiddenClaudeConfig = [
   '.mcp.json',
   '.claude/settings.json',
