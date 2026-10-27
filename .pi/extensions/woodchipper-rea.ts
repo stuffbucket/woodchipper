@@ -1263,6 +1263,19 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		}
 	});
 
+	pi.on("session_before_compact", (event) => {
+		const reInstructions = [
+			"Woodchipper Reverse-Engineering Compaction Rules:",
+			"- Preserve every REA Evidence ID (`ev_...`), `parent_evidence_id`, function virtual address (`0x...`), file offset, and module `node_id` verbatim.",
+			"- Preserve the separation between verified Observations, Inferences, and unresolved Unknowns (`unk_...`).",
+			`- Reference the active workspace report at \`${ledger.getReportPath()}\` and ledger at \`${ledger.getLedgerPath()}\`.`,
+		].join("\n");
+		event.customInstructions = event.customInstructions
+			? `${event.customInstructions}\n\n${reInstructions}`
+			: reInstructions;
+		return undefined;
+	});
+
 	pi.on("before_agent_start", (event) => {
 		const userPrompt = "prompt" in event && typeof event.prompt === "string" ? event.prompt.trim() : "";
 		const baseDir = event.systemPromptOptions?.cwd || projectRoot;
