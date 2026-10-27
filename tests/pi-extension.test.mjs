@@ -110,7 +110,21 @@ test("registers REA MCP server, 3 custom tools, 6 slash commands, and lifecycle 
 		}
 
 		// 3. Slash commands
-		for (const cmdName of ["start", "status", "exit", "gliner", "triage", "trace", "clone-spec", "audit", "ledger", "doctor"]) {
+		for (const cmdName of [
+			"start",
+			"status",
+			"workspace",
+			"clear",
+			"reset",
+			"exit",
+			"gliner",
+			"triage",
+			"trace",
+			"clone-spec",
+			"audit",
+			"ledger",
+			"doctor",
+		]) {
 			assert.ok(state.commands.has(cmdName), `Expected slash command '/${cmdName}' to be registered`);
 		}
 
@@ -517,6 +531,19 @@ test("woodchipper_triage, woodchipper_playbook, slash commands, and before_agent
 		assert.match(statusMsg.message.content, /Working Dir/);
 		assert.match(statusMsg.message.content, /Output Dir/);
 		assert.match(statusMsg.message.content, /12,400 \/ 200,000 tokens/);
+
+		// /clear command invokes ctx.newSession() and supports switching workspace or clearing ledger
+		let newSessionCalls = 0;
+		const clearCmd = state.commands.get("clear");
+		await clearCmd.handler("all", {
+			hasUI: false,
+			async newSession() {
+				newSessionCalls++;
+				return { cancelled: false };
+			},
+			ui: { notify() {} },
+		});
+		assert.equal(newSessionCalls, 1, "Expected /clear to call ctx.newSession()");
 
 		// /exit command invokes ctx.shutdown()
 		let shutdownCalled = false;

@@ -1211,6 +1211,48 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	const handleClearOrReset = async (args: string, ctx: Parameters<Parameters<typeof pi.registerCommand>[1]["handler"]>[1], forceClearLedger = false) => {
+		const trimmed = args.trim();
+		const lower = trimmed.toLowerCase();
+		lastUserPromptSeen = "";
+
+		if (forceClearLedger || lower === "all" || lower === "ledger") {
+			ledger.clear();
+		} else if (trimmed) {
+			ledger.setTargetWorkspace(trimmed);
+			ledger.saveToDisk();
+		}
+
+		if (typeof ctx?.newSession === "function") {
+			await ctx.newSession();
+		}
+		if (ctx?.hasUI) {
+			const suffix =
+				forceClearLedger || lower === "all" || lower === "ledger"
+					? ` and cleared ledger (${ledger.getWorkspaceSlug()})`
+					: trimmed
+						? ` in workspace workspaces/${ledger.getWorkspaceSlug()}/`
+						: ` (workspace workspaces/${ledger.getWorkspaceSlug()}/ preserved)`;
+			ctx.ui.notify(`Started fresh session${suffix}.`, "info");
+		}
+	};
+
+	pi.registerCommand("clear", {
+		description:
+			"Start a fresh conversation session (`/clear`), clear both session and ledger (`/clear all`), or start fresh in a new workspace (`/clear <workspace-or-path>`)",
+		handler: async (args, ctx) => {
+			await handleClearOrReset(args, ctx, false);
+		},
+	});
+
+	pi.registerCommand("reset", {
+		description:
+			"Clear both the conversation session and the current workspace's Evidence Ledger: /reset [new-workspace]",
+		handler: async (args, ctx) => {
+			await handleClearOrReset(args, ctx, !args.trim());
+		},
+	});
+
 	pi.registerCommand("exit", {
 		description: "Gracefully exit the Woodchipper TUI session (alias for /quit): /exit",
 		handler: async (_args, ctx) => {

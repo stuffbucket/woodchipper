@@ -1084,7 +1084,7 @@ export function renderWoodchipperHeaderLines(
 		`${emblemRows[3]} ${muted("Output ")} ${rgbFg(110, 242, 184, reportRel)} ${dim("(isolated per target)")}`,
 		divider,
 		`  ${bright("Drop any file path or ask in plain English:")}  ${dim('"What is /path/to/app?"')}`,
-		`  ${cmdPill("/start <path>")} ${dim("•")} ${cmdPill("/status")} ${dim("•")} ${cmdPill("/triage")} ${dim("•")} ${cmdPill("/trace")} ${dim("•")} ${cmdPill("/audit")} ${dim("•")} ${cmdPill("/clone-spec")} ${dim("•")} ${cmdPill("/ledger")} ${dim("•")} ${cmdPill("/exit")}`,
+		`  ${cmdPill("/start <path>")} ${dim("•")} ${cmdPill("/status")} ${dim("•")} ${cmdPill("/workspace")} ${dim("•")} ${cmdPill("/triage")} ${dim("•")} ${cmdPill("/trace")} ${dim("•")} ${cmdPill("/audit")} ${dim("•")} ${cmdPill("/clear")} ${dim("•")} ${cmdPill("/exit")}`,
 	];
 
 	return lines.map((l) => truncateVisible(l, safeWidth));

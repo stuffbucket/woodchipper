@@ -214,6 +214,14 @@ const MUTANTS = [
 		replacement: "if (true || text.length <= maxChars) {\n\t\treturn { text, truncated: false };\n\t}",
 		testFile: "tests/pi-extension.test.mjs",
 	},
+	{
+		id: "M25_CLEAR_COMMAND_NEW_SESSION",
+		description: "Disable ctx.newSession() invocation in /clear command handler",
+		file: ".pi/extensions/woodchipper-rea.ts",
+		target: "if (typeof ctx?.newSession === \"function\") {\n\t\t\tawait ctx.newSession();\n\t\t}",
+		replacement: "if (false && typeof ctx?.newSession === \"function\") {\n\t\t\tawait ctx.newSession();\n\t\t}",
+		testFile: "tests/pi-extension.test.mjs",
+	},
 ];
 
 function runTestFile(relTestFile) {
