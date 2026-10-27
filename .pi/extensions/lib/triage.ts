@@ -3,6 +3,84 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, "../../..");
+
+/**
+ * Resolve the direct `rea.mjs` entrypoint script inside `node_modules`, self-healing
+ * the `node_modules/rea-agents` symlink from `node_modules/.pnpm/rea-agents@*` if
+ * an interrupted `pnpm` run ever unlinked the top-level entry.
+ */
+export function resolveReaEntryScript(projectRoot = DEFAULT_PROJECT_ROOT): string {
+	const directScript = path.join(projectRoot, "node_modules", "rea-agents", "scripts", "rea.mjs");
+	if (fs.existsSync(directScript)) {
+		return directScript;
+	}
+
+	const pnpmStoreScript = path.join(
+		projectRoot,
+		"node_modules",
+		".pnpm",
+		"rea-agents@6.7.0",
+		"node_modules",
+		"rea-agents",
+		"scripts",
+		"rea.mjs",
+	);
+	if (fs.existsSync(pnpmStoreScript)) {
+		try {
+			const linkTarget = path.join(projectRoot, "node_modules", "rea-agents");
+			if (!fs.existsSync(linkTarget)) {
+				fs.symlinkSync(".pnpm/rea-agents@6.7.0/node_modules/rea-agents", linkTarget);
+			}
+			const binDir = path.join(projectRoot, "node_modules", ".bin");
+			fs.mkdirSync(binDir, { recursive: true });
+			const binLink = path.join(binDir, "rea");
+			if (!fs.existsSync(binLink)) {
+				fs.symlinkSync("../rea-agents/scripts/rea.mjs", binLink);
+			}
+		} catch {
+			// Ignore on read-only filesystems and return pnpmStoreScript directly
+		}
+		return fs.existsSync(directScript) ? directScript : pnpmStoreScript;
+	}
+
+	return directScript;
+}
+
+/**
+ * Resolve only the clean literal environment variables needed for `pi.registerMcpServer("rea")`.
+ * Note: Pi's `createDefaultTransport` runs `resolveConfigValueOrThrow` on every entry in `config.env`
+ * (which interprets leading `!` as shell commands and `$VAR` as required template variables), while
+ * `StdioTransport` already inherits `process.env`. Passing only clean literal paths here prevents
+ * shell prompt variables (`PS1`, `PROMPT`, etc.) from breaking MCP startup.
+ */
+export function resolveReaMcpEnv(
+	baseEnv: NodeJS.ProcessEnv = process.env,
+	projectRoot = DEFAULT_PROJECT_ROOT,
+): Record<string, string> {
+	const full = resolveReaProviderEnv(baseEnv, projectRoot);
+	const keys = [
+		"GHIDRA_INSTALL_DIR",
+		"JAVA_HOME",
+		"GHIDRA_HEADLESS_MAXMEM",
+		"XDG_CACHE_HOME",
+		"XDG_DATA_HOME",
+		"XDG_STATE_HOME",
+		"PI_SKIP_VERSION_CHECK",
+	] as const;
+
+	const clean: Record<string, string> = {};
+	for (const k of keys) {
+		const val = full[k];
+		if (typeof val === "string" && val.length > 0) {
+			clean[k] = val.replace(/\$/g, "$$$$");
+		}
+	}
+	return clean;
+}
 
 /**
  * Resolve default REA provider environment (Ghidra 12.1.4 + Temurin JDK 21)
@@ -631,11 +709,12 @@ function checkBinaryInPath(binName: string, versionArg = "--version"): { availab
 
 export function runReaDoctorSummary(projectRoot: string): ReaDoctorSummary {
 	let parsed: Record<string, unknown> = {};
-	const doctorEnv = resolveReaProviderEnv();
+	const doctorEnv = resolveReaProviderEnv(process.env, projectRoot);
+	const reaScript = resolveReaEntryScript(projectRoot);
 	try {
 		const out = execFileSync(
-			"pnpm",
-			["exec", "rea", "doctor", "--provider", "ghidra", "--skill", "--json"],
+			process.execPath,
+			[reaScript, "doctor", "--provider", "ghidra", "--skill", "--json"],
 			{
 				cwd: projectRoot,
 				env: doctorEnv,

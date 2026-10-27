@@ -27,7 +27,8 @@ import {
 	loadPlaybookContent,
 	PLAYBOOK_CATALOG,
 	type PlaybookId,
-	resolveReaProviderEnv,
+	resolveReaEntryScript,
+	resolveReaMcpEnv,
 	runReaDoctorSummary,
 	runStaticTriage,
 } from "./lib/triage.ts";
@@ -381,10 +382,10 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	// =========================================================================
 	try {
 		pi.registerMcpServer("rea", {
-			command: "pnpm",
-			args: ["exec", "rea", "mcp"],
+			command: process.execPath,
+			args: [resolveReaEntryScript(projectRoot), "mcp"],
 			cwd: projectRoot,
-			env: resolveReaProviderEnv(process.env, projectRoot),
+			env: resolveReaMcpEnv(process.env, projectRoot),
 			exposure: "deferred",
 			toolExposure: { ...DIRECT_REA_TOOL_EXPOSURE },
 			timeout: 300,

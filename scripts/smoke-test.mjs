@@ -29,7 +29,7 @@ import {
 	probeMaximalProvider,
 	selectNextFallbackModel,
 } from "../.pi/extensions/lib/maximal-provider.ts";
-import { formatStaticTriageMarkdown, runStaticTriage } from "../.pi/extensions/lib/triage.ts";
+import { formatStaticTriageMarkdown, resolveReaEntryScript, runStaticTriage } from "../.pi/extensions/lib/triage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -83,10 +83,10 @@ async function main() {
 	console.log();
 
 	// 4. Real REA 6.7.0 JavaScript Application Analysis + 3-Bucket Ledger
-	const reaBin = path.join(ROOT, "node_modules", ".bin", "rea");
+	const reaScript = resolveReaEntryScript(ROOT);
 	const reaOut = execFileSync(
-		reaBin,
-		["analyze-javascript-application", FIXTURE_DIR, "--json"],
+		process.execPath,
+		[reaScript, "analyze-javascript-application", FIXTURE_DIR, "--json"],
 		{
 			cwd: ROOT,
 			encoding: "utf8",

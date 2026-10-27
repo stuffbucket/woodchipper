@@ -84,11 +84,13 @@ test("registers REA MCP server, 3 custom tools, 6 slash commands, and lifecycle 
 		const { pi, state } = createMockPiApi();
 		woodchipperReaExtension(pi);
 
-		// 1. REA MCP server registration
+		// 1. REA MCP server registration (spawns node directly on rea.mjs, bypassing pnpm exec)
 		assert.ok(state.mcpServers.has("rea"), "Expected 'rea' MCP server to be registered");
 		const reaConfig = state.mcpServers.get("rea");
-		assert.equal(reaConfig.command, "pnpm");
-		assert.deepEqual(reaConfig.args, ["exec", "rea", "mcp"]);
+		assert.equal(reaConfig.command, process.execPath);
+		assert.equal(reaConfig.args.length, 2);
+		assert.match(reaConfig.args[0], /rea\.mjs$/);
+		assert.equal(reaConfig.args[1], "mcp");
 		assert.equal(reaConfig.cwd, tmpProject);
 
 		// 2. Custom model-callable tools
