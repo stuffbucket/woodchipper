@@ -217,6 +217,7 @@ const requiredHarnessFiles = [
   '.pi/extensions/lib/triage.ts',
   '.pi/extensions/lib/peer-protocol.ts',
   '.pi/extensions/lib/schema.ts',
+  'woodchipper',
   'bin/woodchipper.mjs',
   'scripts/woodchipper-ctl.mjs',
   'scripts/build-harness.mjs',

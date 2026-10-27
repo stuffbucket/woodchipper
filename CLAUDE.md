@@ -25,6 +25,9 @@ And reorganizes them into a **dual-surface Pi reverse-engineering harness** (int
 This repository uses **`mise`** (`mise.toml`) and **`pnpm`** (`pnpm@12.11.2`, Node `24.22.1`, Python `3.12.15`, Temurin JDK `21.0.12+101.0.LTS`), with `rea-agents@6.7.0` installed locally via `pnpm` and headless Ghidra `12.1.4` configured at `~/.local/share/ghidra/ghidra_12.1.4_PUBLIC` (including the native macOS `arm64` Mach-O `decompile` binary). Submodules are exact SHA pins with adjacent semver comments in `.gitmodules`. Until the configured package proxy mirrors `jose@6.2.13` and `fast-uri@3.1.9`, setup builds their isolated `vendor/overrides/*` submodules in the purpose-built Docker container. It then copies immutable `vendor/pi` into `.woodchipper/pi`, excludes two unused example-only dependency roots with no proxy fix, applies the exact proxy-available audit fixes from `vendor/overrides/pi-audit.json`, builds offline, and requires a zero-finding npm audit; see `vendor/overrides/README.md`.
 
 ```bash
+# Single-command post-clone launcher (auto-trusts mise, runs first-time setup if needed, and opens the TUI)
+./woodchipper         # or: mise run start / pnpm start
+
 # Build temporary dependency overrides in Docker, install dependencies, and build/verify the Pi harness
 mise run setup        # or: pnpm run setup (requires Docker with Buildx)
 

@@ -16,6 +16,10 @@ GHIDRA_HEADLESS_MAXMEM = "4G"
 [settings]
 lockfile = true
 
+[tasks.start]
+description = "Single-command launcher: auto-bootstraps setup on first run if needed and opens the Woodchipper TUI"
+run = "./woodchipper"
+
 [tasks.setup]
 description = "Build isolated dependency overrides, install dependencies, and build the project-local vendored Pi harness"
 run = "pnpm run setup"

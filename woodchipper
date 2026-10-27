@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+# Woodchipper Single-Command Post-Clone Launcher (`./woodchipper`)
+#
+# Automatically trusts `mise.toml`, installs pinned runtime tools (`node`, `pnpm`,
+# `python`, `java`) if missing, runs first-time harness setup if not yet built,
+# and launches the Woodchipper Reverse-Engineering TUI (or forwards any subcommand/target).
+#
+# Usage:
+#   ./woodchipper                         Launch interactive Woodchipper TUI
+#   ./woodchipper /path/to/target         Launch interactive TUI pre-seeded on target
+#   ./woodchipper ask "What is /bin/ls?"  One-shot headless analysis
+#   ./woodchipper daemon                  Run headless A2A / Claude Code peer daemon
+
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+if command -v mise >/dev/null 2>&1; then
+	mise trust --quiet "$ROOT_DIR/mise.toml" >/dev/null 2>&1 || true
+	if ! mise which node >/dev/null 2>&1; then
+		echo "[woodchipper] Installing pinned mise toolchain (Node 24, pnpm 12, Python 3.12, Temurin JDK 21)..." >&2
+		(cd "$ROOT_DIR" && mise install)
+	fi
+	exec mise exec --cd "$ROOT_DIR" -- node --experimental-strip-types "$ROOT_DIR/bin/woodchipper.mjs" "$@"
+fi
+
+exec node --experimental-strip-types "$ROOT_DIR/bin/woodchipper.mjs" "$@"
