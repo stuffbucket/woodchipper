@@ -60,6 +60,35 @@ export function resolveProjectRoot(): string {
 }
 
 /**
+ * Maximum character length for a single REA tool result text block in LLM context (~8,000 tokens).
+ * Any larger output has its `ev_*` IDs extracted into the workspace ledger first, and is then
+ * truncated with a retained-evidence paging hint so one giant tool output cannot blow out context.
+ */
+export const MAX_REA_TOOL_RESULT_CHARS = 32_000;
+
+export function capOversizedReaToolText(
+	text: string,
+	trackedEvidenceIds: readonly string[],
+	maxChars = MAX_REA_TOOL_RESULT_CHARS,
+): { text: string; truncated: boolean } {
+	if (text.length <= maxChars) {
+		return { text, truncated: false };
+	}
+	const evList = trackedEvidenceIds.length > 0 ? trackedEvidenceIds.join(", ") : "see woodchipper_ledger";
+	const footer = [
+		"",
+		"---",
+		`[Woodchipper Context Guardrail: Truncated oversized REA tool output from ${text.length.toLocaleString()} chars to ${maxChars.toLocaleString()} chars to protect the context window.]`,
+		`- Retained Evidence IDs saved in workspace ledger: ${evList}`,
+		`- Page specific slices via: inspect_analysis_view({ source: { kind: "retained-evidence", evidence_id: "${trackedEvidenceIds[0] ?? "ev_..."}" }, view: { ... } })`,
+	].join("\n");
+	return {
+		text: `${text.slice(0, maxChars)}${footer}`,
+		truncated: true,
+	};
+}
+
+/**
  * High-volume REA 6.7.0 tools that accept `detail: "summary" | "full"` and must default
  * to `detail: "summary"` when `detail` is omitted so the model never blows out context on a first call.
  */
@@ -487,13 +516,34 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			textBlocks,
 			event.structuredContent,
 		);
+		const trackedIds = recorded.map((r) => r.id);
 
-		if (recorded.length > 0 && event.details && typeof event.details === "object") {
+		let anyTruncated = false;
+		const updatedContent = Array.isArray(event.content)
+			? event.content.map((part) => {
+					if (part && typeof part === "object" && part.type === "text" && typeof part.text === "string") {
+						const capped = capOversizedReaToolText(part.text, trackedIds);
+						if (capped.truncated) {
+							anyTruncated = true;
+							return { ...part, text: capped.text };
+						}
+					}
+					return part;
+				})
+			: undefined;
+
+		if (recorded.length > 0 || anyTruncated) {
 			return {
-				details: {
-					...(event.details as Record<string, unknown>),
-					woodchipperTrackedEvidenceIds: recorded.map((r) => r.id),
-				},
+				...(anyTruncated && updatedContent ? { content: updatedContent } : {}),
+				...(event.details && typeof event.details === "object"
+					? {
+							details: {
+								...(event.details as Record<string, unknown>),
+								...(trackedIds.length > 0 ? { woodchipperTrackedEvidenceIds: trackedIds } : {}),
+								...(anyTruncated ? { woodchipperTruncatedForContextBudget: true } : {}),
+							},
+						}
+					: {}),
 			};
 		}
 		return undefined;
@@ -1263,6 +1313,27 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		}
 		if (autoTriagedMarkdown) {
 			disciplineLines.push("", "9. Auto-Detected Target Reconnaissance (`TRIAGE_MAP.md` written to workspace):", autoTriagedMarkdown);
+		}
+
+		// Layer 5 Context Strategy: Inject compact persistent Evidence Ledger anchor so post-compaction turns never lose ev_* IDs or open unknowns
+		ledger.reload();
+		const counts = ledger.getCounts();
+		if (counts.evidenceIds > 0 || counts.observations > 0 || counts.inferences > 0 || counts.unresolvedUnknowns > 0) {
+			const data = ledger.getData();
+			const recentObs = data.observations.slice(-5).map((o) => `   - [${o.id}] (${o.evidenceId} @ ${o.location}): ${o.summary}`);
+			const openUnks = data.unknowns
+				.filter((u) => !u.resolved)
+				.slice(-5)
+				.map((u) => `   - [${u.id}] OPEN: ${u.description} (Next probe: ${u.nextProbe ?? "unspecified"})`);
+			const recentEvIds = Object.keys(data.trackedEvidenceIds).slice(-8).join(", ");
+			disciplineLines.push(
+				"",
+				`10. Persistent Workspace Evidence Anchor (\`${ledger.getReportPath()}\` — survives context compaction):`,
+				`   - Counts: ${counts.evidenceIds} ev_* IDs, ${counts.observations} observations, ${counts.inferences} inferences, ${counts.unresolvedUnknowns} open unknowns`,
+				...(recentEvIds ? [`   - Retained Evidence IDs: ${recentEvIds}`] : []),
+				...(recentObs.length > 0 ? ["   - Latest Verified Observations:", ...recentObs] : []),
+				...(openUnks.length > 0 ? ["   - Active Open Unknowns:", ...openUnks] : []),
+			);
 		}
 
 		const disciplineSection = disciplineLines.join("\n");

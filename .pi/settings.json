@@ -4,6 +4,11 @@
   "defaultModel": "claude-sonnet-5-5-20260301",
   "defaultThinkingLevel": "high",
   "quietStartup": true,
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 20480,
+    "keepRecentTokens": 24000
+  },
   "defaultTools": [
     "read",
     "bash",

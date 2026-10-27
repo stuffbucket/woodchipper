@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import woodchipperReaExtension, {
 	HIGH_VOLUME_REA_TOOLS,
+	MAX_REA_TOOL_RESULT_CHARS,
+	capOversizedReaToolText,
 	checkDestructiveGitCommand,
 	isHighVolumeReaTool,
 	isReaTool,
@@ -307,6 +309,21 @@ test("tool_result hook only scrapes ev_* IDs from REA tools and ignores built-in
 		ledger.reload();
 		assert.equal(ledger.getCounts().evidenceIds, 1);
 		assert.ok(ledger.getData().trackedEvidenceIds.ev_macho_header_001);
+
+		// Oversized REA tool result is capped to MAX_REA_TOOL_RESULT_CHARS while preserving ev_* IDs
+		const hugePayload = `{"evidence_id":"ev_huge_999","data":"${"A".repeat(MAX_REA_TOOL_RESULT_CHARS + 5000)}"}`;
+		const cappedRes = await toolResultHandler({
+			type: "tool_result",
+			toolName: "mcp__rea__search_strings",
+			isError: false,
+			content: [{ type: "text", text: hugePayload }],
+			details: {},
+		});
+		assert.equal(cappedRes?.details?.woodchipperTruncatedForContextBudget, true);
+		assert.ok(cappedRes?.content?.[0]?.text.includes("Woodchipper Context Guardrail"));
+		assert.ok(cappedRes?.content?.[0]?.text.includes("ev_huge_999"));
+		assert.ok(cappedRes?.content?.[0]?.text.length < hugePayload.length);
+		assert.ok(typeof capOversizedReaToolText === "function");
 	} finally {
 		if (prevEnv === undefined) {
 			delete process.env.WOODCHIPPER_PROJECT_ROOT;
