@@ -73,13 +73,19 @@ for (const wf of workflowFiles) {
 const forbiddenClaudeConfig = [
   '.mcp.json',
   '.claude/settings.json',
-  '.claude/settings.local.json',
   '.claude/hooks',
   '.claude-plugin/hooks'
 ]
 for (const rel of forbiddenClaudeConfig) {
   if (fs.existsSync(path.join(ROOT, rel))) {
     fail(`Claude configuration must remain absent; configure Woodchipper through Pi instead: ${rel}`)
+  }
+}
+const localSettingsPath = path.join(ROOT, '.claude/settings.local.json')
+if (fs.existsSync(localSettingsPath)) {
+  const localSettings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf8'))
+  if (localSettings.mcpServers || localSettings.hooks || localSettings.enabledMcpjsonServers?.length) {
+    fail('Claude local settings must not configure MCP servers or hooks; configure Woodchipper through Pi instead: .claude/settings.local.json')
   }
 }
 if (!forbiddenClaudeConfig.some((rel) => fs.existsSync(path.join(ROOT, rel)))) {
@@ -202,8 +208,11 @@ if (!fs.existsSync(piAuditPath)) {
 const requiredHarnessFiles = [
   '.pi/settings.json',
   '.pi/SYSTEM.md',
+  '.pi/extensions/woodchipper-maximal.ts',
   '.pi/extensions/woodchipper-rea.ts',
   '.pi/extensions/woodchipper-peer.ts',
+  '.pi/extensions/lib/maximal-provider.ts',
+  '.pi/extensions/lib/gliner-classifier.ts',
   '.pi/extensions/lib/evidence-ledger.ts',
   '.pi/extensions/lib/triage.ts',
   '.pi/extensions/lib/peer-protocol.ts',
@@ -217,6 +226,7 @@ const requiredHarnessFiles = [
   'vendor/overrides/pi-audit.json',
   'vendor/pi/package.json',
   'vendor/pi/packages/coding-agent/package.json',
+  'vendor/gliner-runner/packages/onnx-runner/package.json',
   'site/package.json',
   'site/astro.config.mjs',
   'site/src/pages/index.astro',
@@ -233,7 +243,66 @@ for (const rel of requiredHarnessFiles) {
   }
 }
 
-// 7. Validate the public documentation site and Pages deployment
+// 7. Validate REA 6.7.0 Contract Alignment across skills, playbooks, workflows, and Pi extensions
+const toolContractsPath = path.join(ROOT, 'node_modules', 'rea-agents', 'dist', 'contracts', 'toolContracts.js')
+if (!fs.existsSync(toolContractsPath)) {
+  fail('Missing node_modules/rea-agents/dist/contracts/toolContracts.js')
+} else {
+  const { TOOL_CONTRACTS } = await import(toolContractsPath)
+  const validReaTools = new Set(TOOL_CONTRACTS.map((c) => c.name))
+  const detailReaTools = TOOL_CONTRACTS.filter((c) => Boolean(c.inputSchema?.shape && 'detail' in c.inputSchema.shape)).map((c) => c.name)
+  const { HIGH_VOLUME_REA_TOOLS } = await import(path.join(ROOT, '.pi', 'extensions', 'woodchipper-rea.ts'))
+
+  for (const dt of detailReaTools) {
+    if (!HIGH_VOLUME_REA_TOOLS.has(dt)) {
+      fail(`HIGH_VOLUME_REA_TOOLS in .pi/extensions/woodchipper-rea.ts is missing detail-capable REA tool: ${dt}`)
+    }
+  }
+  for (const ht of HIGH_VOLUME_REA_TOOLS) {
+    if (!validReaTools.has(ht)) {
+      fail(`HIGH_VOLUME_REA_TOOLS contains unknown REA tool: ${ht}`)
+    }
+  }
+
+  const forbiddenRemovedTools = [
+    'inspect_desktop_application',
+    'open_bundle_resources',
+    'inspect_elf_notes',
+    'inspect_byte_entropy',
+    'inspect_il2cpp_metadata',
+    'inspect_gpu_code_objects',
+    'inspect_model_artifact',
+    'match_native_functions'
+  ]
+  const scanDirs = ['skills', 'playbooks', '.claude/workflows', '.pi']
+  const filesToCheck = ['CLAUDE.md', 'AGENTS.md']
+  for (const d of scanDirs) {
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const rel = path.join(dir, entry.name)
+        if (entry.isDirectory()) walk(rel)
+        else if (/\.(md|ts|js|mjs)$/.test(entry.name)) filesToCheck.push(rel)
+      }
+    }
+    walk(path.join(ROOT, d))
+  }
+  let alignmentClean = true
+  for (const f of filesToCheck) {
+    const abs = path.isAbsolute(f) ? f : path.join(ROOT, f)
+    const content = fs.readFileSync(abs, 'utf8')
+    for (const bad of forbiddenRemovedTools) {
+      if (content.includes(bad)) {
+        fail(`Non-existent REA 6.7.0 tool '${bad}' referenced in ${path.relative(ROOT, abs)}`)
+        alignmentClean = false
+      }
+    }
+  }
+  if (alignmentClean && HIGH_VOLUME_REA_TOOLS.size === detailReaTools.length) {
+    ok(`REA 6.7.0 contract alignment (${validReaTools.size} MCP tools, ${detailReaTools.length} detail-capable summary-guarded tools)`)
+  }
+}
+
+// 8. Validate the public documentation site and Pages deployment
 const sitePackage = JSON.parse(fs.readFileSync(path.join(ROOT, 'site', 'package.json'), 'utf8'))
 const siteConfig = fs.readFileSync(path.join(ROOT, 'site', 'astro.config.mjs'), 'utf8')
 const siteWorkflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'site.yml'), 'utf8')

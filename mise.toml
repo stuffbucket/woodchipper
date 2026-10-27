@@ -64,6 +64,10 @@ run = "pnpm test"
 description = "Run the Woodchipper security & logic mutation test suite"
 run = "pnpm run test:mutate"
 
+[tasks.smoke]
+description = "Run end-to-end Woodchipper smoke test against tests/fixtures/sample-electron-app"
+run = "pnpm run smoke"
+
 [tasks.doctor]
 description = "Run REA environment and external tool readiness check (Ghidra 12.1.4 + Skill Identity)"
 run = "pnpm run doctor"

@@ -10,8 +10,17 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { type ConfidenceLevel, EvidenceLedger } from "./lib/evidence-ledger.ts";
+import {
+	assessExpertiseAndMethodologyFeedback,
+	classifyBinarySignals,
+	classifyReverseEngineeringIntent,
+	ensureGlinerModelInstalled,
+	formatWoodchipperOrientationBanner,
+	heuristicClassifyIntent,
+} from "./lib/gliner-classifier.ts";
 import { Type } from "./lib/schema.ts";
 import {
+	extractExistingTargetPathFromPrompt,
 	formatReaDoctorMarkdown,
 	formatStaticTriageMarkdown,
 	loadPlaybookContent,
@@ -30,8 +39,8 @@ export function resolveProjectRoot(): string {
 }
 
 /**
- * High-volume REA tools that must default to `detail: "summary"` when `detail` is omitted
- * so the model never blows out context on a first call.
+ * High-volume REA 6.7.0 tools that accept `detail: "summary" | "full"` and must default
+ * to `detail: "summary"` when `detail` is omitted so the model never blows out context on a first call.
  */
 export const HIGH_VOLUME_REA_TOOLS: ReadonlySet<string> = new Set([
 	"analyze_javascript_application",
@@ -39,8 +48,15 @@ export const HIGH_VOLUME_REA_TOOLS: ReadonlySet<string> = new Set([
 	"inspect_macho",
 	"inspect_artifact",
 	"inspect_managed_artifact",
+	"inspect_managed_members",
 	"inspect_wasm_artifact",
 	"inspect_web_network_capture",
+	"decode_interface_builder",
+	"inspect_evm_interface",
+	"inspect_android_package",
+	"inspect_pcap_capture",
+	"inspect_dart_aot",
+	"get_evidence_bundle",
 ]);
 
 /**
@@ -56,9 +72,11 @@ export const NON_REA_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
 	"find",
 	"ls",
 	"glob",
+	"woodchipper_maximal",
 	"woodchipper_ledger",
 	"woodchipper_triage",
 	"woodchipper_playbook",
+	"woodchipper_classify",
 	"claude_peers",
 ]);
 
@@ -118,6 +136,41 @@ export function normalizeReaToolName(toolName: string): string {
 
 export function isHighVolumeReaTool(toolName: string): boolean {
 	return HIGH_VOLUME_REA_TOOLS.has(normalizeReaToolName(toolName));
+}
+
+/**
+ * Normalize common parameter aliases on REA 6.7.0 tool calls so models that pass `path`
+ * or `parent_evidence_id` still match the strict REA 6.7.0 schema.
+ */
+export function normalizeReaToolInput(toolName: string, input: Record<string, unknown>): void {
+	const bareName = normalizeReaToolName(toolName);
+
+	if (bareName === "analyze_javascript_application") {
+		if (input.input_path === undefined && typeof input.path === "string") {
+			input.input_path = input.path;
+			delete input.path;
+		}
+	} else if (bareName === "inspect_web_network_capture" || bareName === "export_web_scripts") {
+		if (input.capture_path === undefined && typeof input.path === "string") {
+			input.capture_path = input.path;
+			delete input.path;
+		}
+	} else if (bareName === "inspect_analysis_view") {
+		const rawEvidenceId =
+			typeof input.parent_evidence_id === "string"
+				? input.parent_evidence_id
+				: typeof input.evidence_id === "string"
+					? input.evidence_id
+					: undefined;
+		if (input.source === undefined && rawEvidenceId) {
+			input.source = {
+				kind: "retained-evidence",
+				evidence_id: rawEvidenceId,
+			};
+			delete input.parent_evidence_id;
+			delete input.evidence_id;
+		}
+	}
 }
 
 export function isReaTool(toolName: string): boolean {
@@ -255,6 +308,32 @@ const PLAYBOOK_TOOL_PARAMS = Type.Object({
 	),
 });
 
+const CLASSIFY_TOOL_PARAMS = Type.Object({
+	action: Type.Optional(
+		Type.Union(
+			[
+				Type.Literal("classify_intent"),
+				Type.Literal("classify_signals"),
+				Type.Literal("ensure_model"),
+			],
+			{
+				description:
+					"Action for the GLiNER (decide-340m) classifier: 'classify_intent' (plain-English question -> Playbook & Sub-Skill), 'classify_signals' (strings/imports/symbols -> capability buckets), or 'ensure_model' (verify/auto-pull decide-340m).",
+			},
+		),
+	),
+	query: Type.Optional(
+		Type.String({
+			description: "Plain-English user question or reverse-engineering goal when action is 'classify_intent'.",
+		}),
+	),
+	signals: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "List of extracted binary strings, imports, or symbols to classify into capability buckets when action is 'classify_signals'.",
+		}),
+	),
+});
+
 export default function woodchipperReaExtension(pi: ExtensionAPI) {
 	const projectRoot = resolveProjectRoot();
 	const ledger = new EvidenceLedger(projectRoot);
@@ -267,7 +346,7 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			command: "pnpm",
 			args: ["exec", "rea", "mcp"],
 			cwd: projectRoot,
-			env: resolveReaProviderEnv(),
+			env: resolveReaProviderEnv(process.env, projectRoot),
 			description:
 				"Reverse Engineer Anything (REA) MCP server providing static, dynamic, firmware, JS/Electron, mobile, and reconstruction tools.",
 		});
@@ -293,10 +372,13 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			}
 		}
 
-		// Guardrail B: Default detail = "summary" on high-volume REA tools when omitted
-		if (isHighVolumeReaTool(event.toolName) && event.input && typeof event.input === "object") {
+		// Guardrail B: Normalize REA 6.7.0 parameter aliases and default detail = "summary" on high-volume REA tools
+		if (event.input && typeof event.input === "object") {
 			const inputRecord = event.input as Record<string, unknown>;
-			if (inputRecord.detail === undefined) {
+			if (isReaTool(event.toolName)) {
+				normalizeReaToolInput(event.toolName, inputRecord);
+			}
+			if (isHighVolumeReaTool(event.toolName) && inputRecord.detail === undefined) {
 				inputRecord.detail = "summary";
 			}
 		}
@@ -490,10 +572,20 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const baseDir = ctx?.cwd ?? projectRoot;
 			const result = runStaticTriage(params.path, baseDir);
+			let workspaceInfo: ReturnType<typeof ledger.setTargetWorkspace> | undefined;
+			if (result.exists) {
+				workspaceInfo = ledger.setTargetWorkspace(result.resolvedPath);
+			}
 			const markdown = formatStaticTriageMarkdown(result);
+			if (workspaceInfo) {
+				ledger.writeTriageMap(markdown);
+			}
+			const outputText = workspaceInfo
+				? `${markdown}\n\n#### Isolated Target Workspace (No Cross-Project Commingling)\n- **Workspace Folder:** \`${workspaceInfo.workspaceDir}\`\n- **Triage Map File:** \`${workspaceInfo.triageMapPath}\`\n- **Report File:** \`${workspaceInfo.reportPath}\`\n- **Ledger JSON:** \`${workspaceInfo.ledgerPath}\``
+				: markdown;
 			return {
-				content: [{ type: "text", text: markdown }],
-				details: result,
+				content: [{ type: "text", text: outputText }],
+				details: { ...result, workspace: workspaceInfo },
 			};
 		},
 	});
@@ -542,6 +634,70 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerTool({
+		name: "woodchipper_classify",
+		label: "Woodchipper GLiNER Expert Classifier",
+		description:
+			"Run the 340M/380M GLiNER (`decide-340m`, `stuffbucket/gliner-runner`) classifier to map plain-English user questions to the exact Woodchipper Playbook & Sub-Skill, classify binary strings/imports/symbols into capability buckets, or verify/auto-pull the `decide-340m` model.",
+		promptSnippet:
+			"Classify plain-English user intent or binary strings/imports into Playbooks, Sub-Skills, and Capability Buckets via gliner-runner (decide-340m)",
+		parameters: CLASSIFY_TOOL_PARAMS,
+		async execute(_toolCallId, params) {
+			const action = params.action ?? (params.signals?.length ? "classify_signals" : "classify_intent");
+			if (action === "ensure_model") {
+				const status = await ensureGlinerModelInstalled({ projectRoot });
+				return {
+					content: [
+						{
+							type: "text",
+							text: [
+								`# Woodchipper GLiNER Model Status (\`${status.modelId}\`)`,
+								`- **Revision:** \`${status.revision}\``,
+								`- **Installed:** \`${status.installed}\`${status.autoPulled ? " (auto-pulled)" : ""}`,
+								`- **Runner Available:** \`${status.runnerAvailable}\` (${status.runnerSource})`,
+								`- **Server Reachable:** \`${status.serverReachable}\` (\`${status.serverUrl}\`)`,
+								`- **Models Dir:** \`${status.modelsDir}\``,
+							].join("\n"),
+						},
+					],
+					details: status,
+				};
+			}
+
+			if (action === "classify_signals") {
+				const res = await classifyBinarySignals(params.signals ?? [], { projectRoot });
+				const lines = [
+					`# Woodchipper Binary Signal Classification (\`${res.modelId}\` via \`${res.source}\`)`,
+					"",
+					...res.items.map(
+						(item) =>
+							`- \`${item.signal}\` -> ${item.capabilities.length ? item.capabilities.map((c) => `**${c}**`).join(", ") : "_unclassified_"}`,
+					),
+				];
+				return {
+					content: [{ type: "text", text: lines.join("\n") }],
+					details: res,
+				};
+			}
+
+			const res = await classifyReverseEngineeringIntent(params.query ?? "", { projectRoot });
+			const lines = [
+				`# Woodchipper Expert Intent Classification (\`${res.modelId}\` via \`${res.source}\`)`,
+				"",
+				`- **Query:** ${res.query}`,
+				`- **Recommended Playbook:** \`${res.recommendedPlaybook}\` (confidence: ${(res.playbookConfidence * 100).toFixed(1)}%)`,
+				`- **Recommended Sub-Skill:** \`${res.recommendedSubSkill}\` (confidence: ${(res.subSkillConfidence * 100).toFixed(1)}%)`,
+				"",
+				"## Recommended Initial REA 6.7.0 Tool Sequence",
+				...res.initialReaTools.map((t) => `- \`${t}\``),
+			];
+			return {
+				content: [{ type: "text", text: lines.join("\n") }],
+				details: res,
+			};
+		},
+	});
+
 	// =========================================================================
 	// 4. Slash Commands (pi.registerCommand)
 	// =========================================================================
@@ -556,15 +712,19 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			}
 			const triage = runStaticTriage(targetPath, ctx.cwd || projectRoot);
 			const triageMarkdown = formatStaticTriageMarkdown(triage);
+			if (triage.exists) {
+				ledger.setTargetWorkspace(triage.resolvedPath);
+				ledger.writeTriageMap(triageMarkdown);
+			}
 			const prompt = [
-				`Perform a Woodchipper Summary-First Static Triage on \`${targetPath}\`.`,
+				`Perform a Woodchipper Summary-First Static Triage on \`${targetPath}\` (isolated workspace: \`${ledger.getWorkspaceDir()}\`).`,
 				"",
 				triageMarkdown,
 				"",
 				"### Execution Instructions",
 				`1. Load \`skills/${triage.recommendedSubSkill}/SKILL.md\` and follow \`playbooks/${triage.recommendedPlaybook}.md\`.`,
 				'2. Run the recommended target-free REA tools first with `detail: "summary"`, retain `parent_evidence_id`, and page via `inspect_analysis_view` before calling `open_binary`.',
-				"3. Record verified findings in `woodchipper_ledger` and deliver a Three-Bucket Triage Map (Observations with `ev_*` & addresses, Inferences with confidence & competing explanations, and Unknowns).",
+				`3. Record verified findings in \`woodchipper_ledger\` (which automatically writes \`${ledger.getReportPath()}\`) and deliver a Three-Bucket Triage Map (Observations with \`ev_*\` & addresses, Inferences with confidence & competing explanations, and Unknowns).`,
 			].join("\n");
 
 			pi.sendUserMessage(prompt);
@@ -583,16 +743,21 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			const targetPath = trimmed.slice(0, firstSpace).trim();
 			const feature = trimmed.slice(firstSpace + 1).trim();
 			const triage = runStaticTriage(targetPath, ctx.cwd || projectRoot);
+			const triageMarkdown = formatStaticTriageMarkdown(triage);
+			if (triage.exists) {
+				ledger.setTargetWorkspace(triage.resolvedPath);
+				ledger.writeTriageMap(triageMarkdown);
+			}
 
 			const prompt = [
-				`Trace the feature "${feature}" end-to-end in target \`${triage.resolvedPath}\`.`,
+				`Trace the feature "${feature}" end-to-end in target \`${triage.resolvedPath}\` (isolated workspace: \`${ledger.getWorkspaceDir()}\`).`,
 				"",
-				formatStaticTriageMarkdown(triage),
+				triageMarkdown,
 				"",
 				"### Feature Trace Sequence (`triage-and-feature-trace` Playbook)",
 				`1. Locate static entry seeds for "${feature}" (strings, exports, UI labels, CLI flags, IPC handlers) using target-free tools or \`search_strings\` / \`search_procedures\` with \`detail: "summary"\`.`,
 				'2. Walk the call & data chain hop-by-hop (`xrefs` -> `resolve_containing_procedure` -> `analyze_function`, or `trace_application_feature` for JS/Electron).',
-				"3. Record each hop in `woodchipper_ledger` and output a Step-by-Step Hop Table (`Hop # | Layer | Function/Module | Address/Node ID | Evidence ID | Transformation/Side Effect`) followed by separated Observations, Inferences, and Unknowns.",
+				`3. Record each hop in \`woodchipper_ledger\` (saved to \`${ledger.getReportPath()}\`) and output a Step-by-Step Hop Table (\`Hop # | Layer | Function/Module | Address/Node ID | Evidence ID | Transformation/Side Effect\`) followed by separated Observations, Inferences, and Unknowns.`,
 			].join("\n");
 
 			pi.sendUserMessage(prompt);
@@ -608,15 +773,20 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 				return;
 			}
 			const triage = runStaticTriage(targetPath, ctx.cwd || projectRoot);
+			const triageMarkdown = formatStaticTriageMarkdown(triage);
+			if (triage.exists) {
+				ledger.setTargetWorkspace(triage.resolvedPath);
+				ledger.writeTriageMap(triageMarkdown);
+			}
 			const prompt = [
-				`Produce a clean-room behavioral specification (\`CLONE_SPEC.md\`) for \`${triage.resolvedPath}\`.`,
+				`Produce a clean-room behavioral specification (\`CLONE_SPEC.md\`) for \`${triage.resolvedPath}\` (isolated workspace: \`${ledger.getWorkspaceDir()}\`).`,
 				"",
-				formatStaticTriageMarkdown(triage),
+				triageMarkdown,
 				"",
 				"### Clean-Room Specification Rules (`clean-room-and-porting` Playbook)",
 				"1. Extract ONLY behavioral contracts, state machines, mathematical formulas, persistence schemas (`inspect_sqlite_database` / `inspect_plist`), and wire/IPC protocols—never copy proprietary code, branding, or assets.",
 				'2. Use `build_reconstruction_obligation_ledger` (where supported) and target-free `detail: "summary"` views first.',
-				"3. Cite every behavioral requirement with `[Evidence: <evidence_id> @ <address/node_id>]` and mark any unverified branch with `[UNKNOWN: <reason & next probe>]` in `woodchipper_ledger`.",
+				`3. Cite every behavioral requirement with \`[Evidence: <evidence_id> @ <address/node_id>]\` and mark any unverified branch with \`[UNKNOWN: <reason & next probe>]\` in \`woodchipper_ledger\` (\`${ledger.getReportPath()}\`).`,
 			].join("\n");
 
 			pi.sendUserMessage(prompt);
@@ -632,16 +802,21 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 				return;
 			}
 			const triage = runStaticTriage(targetPath, ctx.cwd || projectRoot);
+			const triageMarkdown = formatStaticTriageMarkdown(triage);
+			if (triage.exists) {
+				ledger.setTargetWorkspace(triage.resolvedPath);
+				ledger.writeTriageMap(triageMarkdown);
+			}
 			const prompt = [
-				`Conduct a defensive trust-boundary and source-to-sink security audit on authorized target \`${triage.resolvedPath}\`.`,
+				`Conduct a defensive trust-boundary and source-to-sink security audit on authorized target \`${triage.resolvedPath}\` (isolated workspace: \`${ledger.getWorkspaceDir()}\`).`,
 				"",
-				formatStaticTriageMarkdown(triage),
+				triageMarkdown,
 				"",
 				"### Defensive Security Audit Sequence (`security-and-vr` Playbook)",
 				"1. Load `skills/woodchipper-audit/SKILL.md` and `playbooks/security-and-vr.md`.",
 				'2. Enumerate untrusted entry surfaces (IPC handlers, network parsers, exported Android components, IOCTLs, Electron fuses via `inspect_electron_fuses`) with `detail: "summary"`.',
 				"3. Trace paths from untrusted sources to privileged sinks (`execve`/`system`/`child_process`, `shell.openExternal`, memory copies, file/SQLite writes) and verify all guards/bounds checks along the path.",
-				"4. Never report an unverified static hypothesis as a confirmed vulnerability—log each candidate in `woodchipper_ledger` with Source (`evidence_id` + address), Sink (`evidence_id` + address), Observed Guards, Status (`Observation` vs `Inference`), and Minimal Controlled Validation Step.",
+				`4. Never report an unverified static hypothesis as a confirmed vulnerability—log each candidate in \`woodchipper_ledger\` (\`${ledger.getReportPath()}\`) with Source (\`evidence_id\` + address), Sink (\`evidence_id\` + address), Observed Guards, Status (\`Observation\` vs \`Inference\`), and Minimal Controlled Validation Step.`,
 			].join("\n");
 
 			pi.sendUserMessage(prompt);
@@ -655,7 +830,7 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			const subcmd = args.trim().toLowerCase();
 			if (subcmd === "clear") {
 				ledger.clear();
-				ctx.ui.notify("Cleared Woodchipper Evidence Ledger (.woodchipper/evidence-ledger.json).", "info");
+				ctx.ui.notify(`Cleared Woodchipper Evidence Ledger (${ledger.getLedgerPath()}).`, "info");
 				return;
 			}
 
@@ -670,12 +845,12 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 					customType: "woodchipper-ledger",
 					content: report,
 					display: true,
-					details: { counts, ledgerPath: ledger.getLedgerPath() },
+					details: { counts, ledgerPath: ledger.getLedgerPath(), reportPath: ledger.getReportPath() },
 				},
 				{ triggerTurn: false },
 			);
 			ctx.ui.notify(
-				`Ledger: ${counts.evidenceIds} ev_* IDs, ${counts.observations} obs, ${counts.inferences} inf, ${counts.unresolvedUnknowns} open unknowns`,
+				`Ledger (${ledger.getWorkspaceSlug()}): ${counts.evidenceIds} ev_* IDs, ${counts.observations} obs, ${counts.inferences} inf, ${counts.unresolvedUnknowns} open unknowns -> ${ledger.getReportPath()}`,
 				"info",
 			);
 		},
@@ -703,18 +878,157 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("start", {
+		description:
+			"Show the Woodchipper appliance orientation guide or start a guided plain-English intake: /start [path-or-question]",
+		handler: async (args, ctx) => {
+			const trimmed = args.trim();
+			if (!trimmed) {
+				const banner = formatWoodchipperOrientationBanner({
+					activeModel: ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+				});
+				pi.sendMessage(
+					{
+						customType: "woodchipper-welcome",
+						content: banner,
+						display: true,
+					},
+					{ triggerTurn: false },
+				);
+				return;
+			}
+
+			const triage = runStaticTriage(trimmed, ctx.cwd || projectRoot);
+			if (triage.exists) {
+				const triageMarkdown = formatStaticTriageMarkdown(triage);
+				ledger.setTargetWorkspace(triage.resolvedPath);
+				ledger.writeTriageMap(triageMarkdown);
+				const prompt = [
+					`Guided Appliance Intake for \`${triage.resolvedPath}\` (isolated workspace: \`${ledger.getWorkspaceDir()}\`):`,
+					"",
+					triageMarkdown,
+					"",
+					"### Appliance Operator Instructions",
+					`1. Load \`skills/${triage.recommendedSubSkill}/SKILL.md\` and run the target-free REA tools above with \`detail: "summary"\`.`,
+					`2. Explain what this artifact is, how it is built, and its main capabilities in clear, accessible English (citing \`ev_*\` IDs and addresses, saved to \`${ledger.getReportPath()}\`).`,
+					"3. Propose **3 concrete next-step options** the user can pick from (e.g., (A) Trace a specific feature/button, (B) Check network/telemetry/IPC behavior, (C) Run a security audit or clean-room spec).",
+				].join("\n");
+				pi.sendUserMessage(prompt);
+				return;
+			}
+
+			pi.sendUserMessage(trimmed);
+		},
+	});
+
+	pi.registerCommand("gliner", {
+		description:
+			"Inspect or run the Woodchipper GLiNER (decide-340m) classifier: /gliner [status|ensure-model|classify <text>]",
+		handler: async (args, ctx) => {
+			const trimmed = args.trim();
+			if (trimmed.toLowerCase().startsWith("classify ")) {
+				const query = trimmed.slice("classify ".length).trim();
+				const res = await classifyReverseEngineeringIntent(query, { projectRoot });
+				pi.sendMessage(
+					{
+						customType: "woodchipper-gliner",
+						content: `${res.plainEnglishSummary}\n\nInitial REA Tools:\n${res.initialReaTools.map((t) => `- \`${t}\``).join("\n")}`,
+						display: true,
+						details: res,
+					},
+					{ triggerTurn: false },
+				);
+				return;
+			}
+			const status = await ensureGlinerModelInstalled({ projectRoot });
+			const content = [
+				`# Woodchipper GLiNER Classifier (\`${status.modelId}\`)`,
+				`- **Model Revision:** \`${status.revision}\``,
+				`- **Model Installed:** \`${status.installed}\`${status.autoPulled ? " (auto-pulled)" : ""}`,
+				`- **Runner Available:** \`${status.runnerAvailable}\` (${status.runnerSource})`,
+				`- **HTTP Server:** \`${status.serverReachable ? "ONLINE" : "OFFLINE"}\` (\`${status.serverUrl}\`)`,
+				`- **Cache Directory:** \`${status.modelsDir}\``,
+			].join("\n");
+			pi.sendMessage(
+				{
+					customType: "woodchipper-gliner",
+					content,
+					display: true,
+					details: status,
+				},
+				{ triggerTurn: false },
+			);
+			if (ctx.hasUI) {
+				ctx.ui.notify(
+					`GLiNER (${status.modelId}): model=${status.installed ? "ready" : "missing"}, runner=${status.runnerAvailable ? "ready" : "fallback"}`,
+					"info",
+				);
+			}
+		},
+	});
+
 	// =========================================================================
-	// 5. System Prompt Enrichment (pi.on("before_agent_start"))
+	// 5. Startup Orientation & System Prompt Enrichment
 	// =========================================================================
+	pi.on("session_start", async (event, ctx) => {
+		if (event.reason === "startup" && ctx?.hasUI) {
+			const banner = formatWoodchipperOrientationBanner({
+				activeModel: ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+			});
+			pi.sendMessage(
+				{
+					customType: "woodchipper-welcome",
+					content: banner,
+					display: true,
+				},
+				{ triggerTurn: false },
+			);
+		}
+	});
+
 	pi.on("before_agent_start", (event) => {
-		const disciplineSection = [
+		const userPrompt = "prompt" in event && typeof event.prompt === "string" ? event.prompt.trim() : "";
+		const baseDir = event.systemPromptOptions?.cwd || projectRoot;
+		const detectedPath = userPrompt ? extractExistingTargetPathFromPrompt(userPrompt, baseDir) : null;
+		let autoTriagedMarkdown = "";
+		if (detectedPath) {
+			const autoTriage = runStaticTriage(detectedPath, baseDir);
+			if (autoTriage.exists) {
+				ledger.setTargetWorkspace(autoTriage.resolvedPath);
+				autoTriagedMarkdown = formatStaticTriageMarkdown(autoTriage);
+				ledger.writeTriageMap(autoTriagedMarkdown);
+			}
+		}
+
+		const intentHint = userPrompt ? heuristicClassifyIntent(userPrompt) : null;
+		const assessment = userPrompt ? assessExpertiseAndMethodologyFeedback(userPrompt) : null;
+
+		const disciplineLines = [
 			"Woodchipper 5.5-Series Reverse-Engineering Operating Discipline:",
 			"1. Three-Bucket Epistemology: Strictly separate every finding into Observations (direct tool output + `evidence_id` `ev_...` + address/node ID), Inferences (hypotheses with confidence and competing explanations), and Unknowns (unexamined paths or truncated pages logged via `woodchipper_ledger` or `record_unknown`).",
-			'2. Summary-First Context Protection: Always pass `detail: "summary"` first on high-volume REA tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_macho`, `inspect_artifact`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_web_network_capture`), retain `parent_evidence_id`, and page slices via `inspect_analysis_view`.',
-			"3. Target-Free Before `open_binary`: Run `woodchipper_triage` and target-free path-based REA tools (`analyze_javascript_application`, `inspect_go_binary`, `inspect_rust_binary`, `inspect_elf_notes`, `inspect_pe_resources`, `inspect_sqlite_database`, `inspect_android_package`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_evm_interface`, `inspect_model_artifact`, `inspect_il2cpp_metadata`) before paying the cost of `open_binary`.",
+			'2. Summary-First Context Protection: Always pass `detail: "summary"` first on high-volume REA tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_macho`, `inspect_artifact`, `inspect_managed_artifact`, `inspect_managed_members`, `inspect_wasm_artifact`, `inspect_web_network_capture`, `decode_interface_builder`, `inspect_evm_interface`, `inspect_android_package`, `inspect_pcap_capture`, `inspect_dart_aot`, `get_evidence_bundle`), retain `parent_evidence_id`, and page slices via `inspect_analysis_view`.',
+			"3. Target-Free Before `open_binary`: Run `woodchipper_triage` and target-free path-based REA tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_go_binary`, `inspect_rust_binary`, `inspect_pe_resources`, `inspect_sqlite_database`, `inspect_android_package`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_evm_interface`, `inspect_firmware_regions`, `inspect_plist`) before paying the cost of `open_binary`.",
 			"4. Git & Worktree Safety: Never run `git reset --hard`, `git clean -fd`, `git checkout -- <path>`, or working-tree `git restore`.",
-			"5. Evidence Ledger Persistence: All captured `ev_*` IDs and 3-bucket entries are persisted in `.woodchipper/evidence-ledger.json` (query or export via `woodchipper_ledger`).",
-		].join("\n");
+			`5. Isolated Per-Target Workspaces: All deliverables for the active target are written to \`${ledger.getWorkspaceDir()}\` (\`REPORT.md\`, \`TRIAGE_MAP.md\`, \`evidence-ledger.json\`) — never hidden in dot-directories or global XDG folders, and never commingled across unrelated projects.`,
+			"6. Adaptive Operator-to-Expert Calibration & Proactive Pushback: Default to Appliance Operator mode (plain-English synthesis + 2-3 clear next steps) unless the user demonstrates reverse-engineering fluency, in which case shift to Expert Collaborator mode. In BOTH modes, never act as a passive yes-man: proactively advise the user when a requested action is premature, noisy, or uses the wrong engine (e.g., running dynamic hooks before static triage, decompiling a whole binary instead of summary paging, or conflating a static string with runtime execution).",
+		];
+
+		if (intentHint) {
+			disciplineLines.push(
+				`7. Active Turn Routing Hint: Recommended Playbook=\`${intentHint.recommendedPlaybook}\`, Sub-Skill=\`${intentHint.recommendedSubSkill}\` (call \`woodchipper_classify\` for GLiNER \`decide-340m\` intent or binary capability classification).`,
+			);
+		}
+		if (assessment) {
+			disciplineLines.push(`8. Calibrated Persona (${assessment.expertiseLevel}): ${assessment.personaGuidance}`);
+			for (const adv of assessment.methodologyAdvisories) {
+				disciplineLines.push(`   - ${adv}`);
+			}
+		}
+		if (autoTriagedMarkdown) {
+			disciplineLines.push("", "9. Auto-Detected Target Reconnaissance (`TRIAGE_MAP.md` written to workspace):", autoTriagedMarkdown);
+		}
+
+		const disciplineSection = disciplineLines.join("\n");
 
 		if (event.systemPromptOptions?.sections) {
 			event.systemPromptOptions.sections.woodchipper_discipline = disciplineSection;

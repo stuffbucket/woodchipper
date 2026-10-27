@@ -54,7 +54,7 @@ porting a native C/C++/DOS/SDL/OpenGL executable to WebAssembly.
 ### Agent Execution Sequence
 
 1. **Engine & Asset Pipeline Map:**
-   - Identify engine/framework (Unity IL2CPP via `inspect_il2cpp_metadata`, Godot PCK via `inspect_artifact`, DOS MZ/COM via `inspect_native_load_image`, or custom native).
+   - Identify engine/framework (Flutter/Dart via `identify_flutter_build` / `inspect_dart_aot`, Unity IL2CPP via `open_binary` + `search_strings` / `list_names`, Godot PCK via `open_binary` + `inspect_artifact`, DOS MZ/COM via `inspect_native_load_image`, or custom native).
    - Map the main loop, frame tick order, asset archive format, and gameplay data tables (`read_bytes`).
 2. **Portability Classification (Every Subsystem Cited by Function Address):**
    - **Portable as-is:** Pure math, state updates, AI, collision, level parsers.

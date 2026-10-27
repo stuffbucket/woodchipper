@@ -54,7 +54,7 @@ bugs, or behavioral regressions.
    - Run `open_binary` + `inspect_artifact` on both versions → `compare_artifacts`.
    - For JS/Electron: `analyze_javascript_application` on both → `compare_application_versions` and `compare_javascript_export_shapes`.
 2. **Function Matching & Dossier Diff:**
-   - Run `match_native_functions` on procedure inventories from both binaries → page via `inspect_analysis_view` (`kind: "function-matches"`).
+   - Inventory procedures across both binaries (`list_procedures`, `search_procedures`).
    - Call `analyze_function` on modified functions and run `compare_functions` and `find_changed_behavior`.
 3. **Variant & Caller Audit:**
    - Identify what bounds/validation check was added in the patched function, then check all callers (`procedure_callers`) and sibling functions (`search_procedures`) for unpatched variants.

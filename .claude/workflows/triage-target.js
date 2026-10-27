@@ -64,8 +64,8 @@ const FACETS = [
   {
     key: 'container-and-metadata',
     prompt: `Target: ${target}
-Use REA target-free tools (or CLI pnpm exec rea) to identify the container format, compiler/runtime metadata, build IDs, and entropy without running a heavy disassembler import if possible:
-- Check inspect_desktop_application, inspect_go_binary, inspect_rust_binary, inspect_elf_notes, inspect_pe_resources, inspect_byte_entropy, or inspect_electron_fuses as applicable to the target type.
+Use REA target-free tools (or CLI pnpm exec rea) to identify the container format, compiler/runtime metadata, build IDs, and regions without running a heavy disassembler import if possible:
+- Check inspect_binary_layout, inspect_go_binary, inspect_rust_binary, inspect_pe_resources, inspect_firmware_regions, inspect_plist, or inspect_electron_fuses as applicable to the target type.
 Return only verified Observations (with evidence_id and file/range location), Inferences, Unknowns, and candidate entry seeds.`,
   },
   {
@@ -73,8 +73,8 @@ Return only verified Observations (with evidence_id and file/range location), In
     prompt: `Target: ${target}
 Use REA with detail: "summary" first to map the structural layout of ${target}:
 - For JS/Electron: analyze_javascript_application (detail: "summary") + inspect_analysis_view module pages.
-- For ELF/Mach-O/PE: inspect_binary_layout or inspect_macho (detail: "summary") or open_binary + binary_overview.
-- For APK/Archive/Apple bundle: inspect_android_package, open_bundle_resources, or open_binary + inspect_artifact (detail: "summary").
+- For ELF/Mach-O/PE: inspect_binary_layout (detail: "summary") or open_binary + inspect_macho (detail: "summary") / binary_overview.
+- For APK/Archive/Apple bundle: inspect_android_package, inspect_plist, or open_binary + inspect_artifact (detail: "summary").
 Never dump full multi-MB outputs into context. Return Observations, Inferences, Unknowns, and structural entry seeds.`,
   },
   {

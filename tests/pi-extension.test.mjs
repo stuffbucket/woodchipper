@@ -10,13 +10,24 @@ import woodchipperReaExtension, {
 	checkDestructiveGitCommand,
 	isHighVolumeReaTool,
 	isReaTool,
+	normalizeReaToolInput,
 } from "../.pi/extensions/woodchipper-rea.ts";
 import { EvidenceLedger } from "../.pi/extensions/lib/evidence-ledger.ts";
 import {
+	assessExpertiseAndMethodologyFeedback,
+	classifyBinarySignals,
+	classifyReverseEngineeringIntent,
+	defaultGlinerModelsDir,
+	ensureGlinerModelInstalled,
+	formatWoodchipperOrientationBanner,
+} from "../.pi/extensions/lib/gliner-classifier.ts";
+import {
 	PLAYBOOK_CATALOG,
+	resolveReaProviderEnv,
 	runReaDoctorSummary,
 	runStaticTriage,
 } from "../.pi/extensions/lib/triage.ts";
+import { buildWoodchipperPiArgs } from "../bin/woodchipper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -135,6 +146,40 @@ test("tool_call & user_bash hooks default detail='summary' on high-volume REA to
 			}
 		}
 
+		// REA 6.7.0 parameter alias normalization (path -> input_path / capture_path, parent_evidence_id -> source)
+		const jsCall = {
+			type: "tool_call",
+			toolCallId: "tc_norm_js",
+			toolName: "mcp__rea__analyze_javascript_application",
+			input: { path: "/tmp/app.asar" },
+		};
+		await toolCallHandler(jsCall, ctx);
+		assert.equal(jsCall.input.input_path, "/tmp/app.asar");
+		assert.equal(jsCall.input.path, undefined);
+		assert.equal(jsCall.input.detail, "summary");
+
+		const captureCall = {
+			type: "tool_call",
+			toolCallId: "tc_norm_cap",
+			toolName: "inspect_web_network_capture",
+			input: { path: "/tmp/session.har" },
+		};
+		await toolCallHandler(captureCall, ctx);
+		assert.equal(captureCall.input.capture_path, "/tmp/session.har");
+		assert.equal(captureCall.input.path, undefined);
+		assert.equal(captureCall.input.detail, "summary");
+
+		const viewCall = {
+			type: "tool_call",
+			toolCallId: "tc_norm_view",
+			toolName: "mcp__rea__inspect_analysis_view",
+			input: { parent_evidence_id: "ev_parent_123", view: { kind: "page", collection: "modules" } },
+		};
+		await toolCallHandler(viewCall, ctx);
+		assert.deepEqual(viewCall.input.source, { kind: "retained-evidence", evidence_id: "ev_parent_123" });
+		assert.equal(viewCall.input.parent_evidence_id, undefined);
+		assert.ok(typeof normalizeReaToolInput === "function");
+
 		// Destructive git command blocking including bypass patterns (-C, quotes, line continuations, restore, checkout -f, switch -f, stash drop)
 		const badCmds = [
 			["git", "reset", "--" + "hard", "HEAD~1"].join(" "),
@@ -193,6 +238,21 @@ test("tool_call & user_bash hooks default detail='summary' on high-volume REA to
 		}
 		fs.rmSync(tmpProject, { recursive: true, force: true });
 	}
+	// REA 6.7.0 parameter alias normalization (path -> input_path / capture_path, parent_evidence_id -> source)
+	const jsInput = { path: "/tmp/app.asar" };
+	normalizeReaToolInput("mcp__rea__analyze_javascript_application", jsInput);
+	assert.equal(jsInput.input_path, "/tmp/app.asar");
+	assert.equal(jsInput.path, undefined);
+
+	const capInput = { path: "/tmp/session.har" };
+	normalizeReaToolInput("inspect_web_network_capture", capInput);
+	assert.equal(capInput.capture_path, "/tmp/session.har");
+	assert.equal(capInput.path, undefined);
+
+	const viewInput = { parent_evidence_id: "ev_parent_123", view: { kind: "page", collection: "modules" } };
+	normalizeReaToolInput("mcp__rea__inspect_analysis_view", viewInput);
+	assert.deepEqual(viewInput.source, { kind: "retained-evidence", evidence_id: "ev_parent_123" });
+	assert.equal(viewInput.parent_evidence_id, undefined);
 });
 
 test("tool_result hook only scrapes ev_* IDs from REA tools and ignores built-in read/bash/grep tools", async () => {
@@ -414,5 +474,168 @@ test("woodchipper_triage, woodchipper_playbook, slash commands, and before_agent
 			process.env.WOODCHIPPER_PROJECT_ROOT = prevEnv;
 		}
 		fs.rmSync(tmpProject, { recursive: true, force: true });
+	}
+});
+
+test("gliner-classifier auto-pulls decide-340m when missing and classifies plain-English intent & binary signals", async () => {
+	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "wc-gliner-test-"));
+	try {
+		const fakeBin = path.join(tmpDir, "fake-gliner-runner");
+		fs.writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n", "utf8");
+		fs.chmodSync(fakeBin, 0o755);
+
+		const modelsDir = path.join(tmpDir, "models");
+		const invokedCommands = [];
+
+		const mockExecSync = (_cmd, args) => {
+			invokedCommands.push(args);
+			if (args[0] === "models" && args[1] === "list") {
+				return JSON.stringify({ models: [{ model_id: "decide-340m", installed: false }] });
+			}
+			if (args[0] === "models" && args[1] === "install") {
+				return JSON.stringify({ model_id: "decide-340m", installed: true });
+			}
+			if (args[0] === "classify") {
+				const labelsIdx = args.indexOf("--labels");
+				const labelsStr = labelsIdx >= 0 ? args[labelsIdx + 1] : "";
+				if (labelsStr.includes("security-and-vr")) {
+					return JSON.stringify({
+						category: {
+							value: "security-and-vr",
+							confidence: 0.94,
+							probabilities: { "security-and-vr": 0.94, "triage-and-feature-trace": 0.06 },
+						},
+					});
+				}
+				return JSON.stringify({
+					category: {
+						value: "woodchipper-audit",
+						confidence: 0.91,
+						probabilities: { "woodchipper-audit": 0.91, "woodchipper-native": 0.09 },
+					},
+				});
+			}
+			return "{}";
+		};
+
+		// 1. Verify ensureGlinerModelInstalled detects missing decide-340m and auto-pulls with --yes
+		const status = await ensureGlinerModelInstalled({
+			projectRoot: ROOT,
+			modelsDir,
+			autoPull: true,
+			env: { WOODCHIPPER_GLINER_BIN: fakeBin },
+			fetchImpl: async () => {
+				throw new Error("offline server");
+			},
+			execSyncImpl: mockExecSync,
+		});
+		assert.equal(status.installed, true, "Expected decide-340m to be marked installed after auto-pull");
+		assert.equal(status.autoPulled, true, "Expected decide-340m to be auto-pulled when missing");
+		assert.ok(
+			invokedCommands.some((a) => a[0] === "models" && a[1] === "install" && a.includes("decide-340m") && a.includes("--yes")),
+			"Expected `gliner-runner models install decide-340m --yes` to be invoked",
+		);
+
+		// 2. Verify classifyReverseEngineeringIntent via CLI
+		const intentRes = await classifyReverseEngineeringIntent("Is this Windows kernel driver safe or does it have an IOCTL overflow?", {
+			projectRoot: ROOT,
+			modelsDir,
+			env: { WOODCHIPPER_GLINER_BIN: fakeBin },
+			fetchImpl: async () => {
+				throw new Error("offline server");
+			},
+			execSyncImpl: mockExecSync,
+		});
+		assert.equal(intentRes.source, "gliner-cli");
+		assert.equal(intentRes.recommendedPlaybook, "security-and-vr");
+		assert.equal(intentRes.recommendedSubSkill, "woodchipper-audit");
+
+		// 3. Verify classifyBinarySignals heuristic fallback when offline
+		const sigRes = await classifyBinarySignals(
+			["https://telemetry.example.com/v1/collect", "ipcMain.handle('run-command')", "child_process.exec", "sqlite3_prepare_v2"],
+			{
+				projectRoot: ROOT,
+				env: { PI_OFFLINE: "1" },
+			},
+		);
+		assert.equal(sigRes.items.length, 4);
+		assert.ok(sigRes.items[0].capabilities.includes("network_telemetry"));
+		assert.ok(sigRes.items[1].capabilities.includes("ipc_rpc"));
+		assert.ok(sigRes.items[2].capabilities.includes("command_execution_sink"));
+		assert.ok(sigRes.items[3].capabilities.includes("filesystem_database"));
+
+		// 4. Verify adaptive operator-to-expert calibration & proactive methodology pushback
+		const operatorAssess = assessExpertiseAndMethodologyFeedback("What is /tmp/mystery-app and does it phone home to a server?");
+		assert.equal(operatorAssess.expertiseLevel, "appliance-operator");
+		assert.ok(operatorAssess.methodologyAdvisories.some((a) => a.includes("Static String vs. Reachable Execution")));
+
+		const expertAssess = assessExpertiseAndMethodologyFeedback(
+			"Attach Frida to 0x100004a20 and decompile all functions in this Electron app.asar using Ghidra",
+		);
+		assert.equal(expertAssess.expertiseLevel, "expert");
+		assert.ok(expertAssess.methodologyAdvisories.some((a) => a.includes("Static-Before-Dynamic")));
+		assert.ok(expertAssess.methodologyAdvisories.some((a) => a.includes("Summary-First vs. Whole-Binary Dump")));
+		assert.ok(expertAssess.methodologyAdvisories.some((a) => a.includes("Target-Free Specialized Analyzer")));
+
+		const banner = formatWoodchipperOrientationBanner({ activeModel: "maximal/claude-sonnet-5-5-20260301", glinerReady: true });
+		assert.match(banner, /Autonomous Reverse-Engineering Appliance/);
+		assert.match(banner, /\/start/);
+	} finally {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test("workspaces isolate findings per target and never leak into global XDG or ~/.pi/agent/sessions", () => {
+	const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "wc-workspace-iso-"));
+	try {
+		const ledger = new EvidenceLedger(tmpRoot);
+
+		// 1. Switch to Project A and record an observation
+		const wsA = ledger.setTargetWorkspace("/opt/targets/project-alpha/app.asar");
+		assert.match(wsA.workspaceSlug, /^app\.asar-[a-f0-9]{8}$/);
+		assert.equal(wsA.reportPath, path.join(tmpRoot, "workspaces", wsA.workspaceSlug, "REPORT.md"));
+		assert.equal(wsA.ledgerPath, path.join(tmpRoot, "workspaces", wsA.workspaceSlug, "evidence-ledger.json"));
+		ledger.addObservation({
+			evidenceId: "ev_alpha_001",
+			location: "main.js:10",
+			summary: "Project Alpha IPC handler",
+		});
+		assert.equal(ledger.getCounts().observations, 1);
+		assert.equal(fs.existsSync(wsA.reportPath), true);
+
+		// 2. Switch to Project B and verify zero commingling with Project A
+		const wsB = ledger.setTargetWorkspace("/opt/targets/project-beta/firmware.bin");
+		assert.match(wsB.workspaceSlug, /^firmware\.bin-[a-f0-9]{8}$/);
+		assert.notEqual(wsA.workspaceDir, wsB.workspaceDir);
+		assert.equal(ledger.getCounts().observations, 0, "Project Beta workspace must not commingle Project Alpha observations");
+		ledger.addObservation({
+			evidenceId: "ev_beta_999",
+			location: "0x08000100",
+			summary: "Project Beta reset vector",
+		});
+		assert.equal(ledger.getCounts().observations, 1);
+
+		// 3. Switch back to Project A and verify its state was preserved intact
+		ledger.setTargetWorkspace("/opt/targets/project-alpha/app.asar");
+		assert.equal(ledger.getCounts().observations, 1);
+		assert.equal(ledger.getData().observations[0].evidenceId, "ev_alpha_001");
+
+		// 4. Verify GLiNER models dir defaults inside projectRoot, not ~/Library/Caches or ~/.cache
+		const modelsDir = defaultGlinerModelsDir({}, tmpRoot);
+		assert.equal(modelsDir, path.join(tmpRoot, "vendor", "gliner-runner", "models"));
+
+		// 5. Verify REA XDG dirs are isolated inside workspaces/.rea-runtime
+		const reaEnv = resolveReaProviderEnv({}, tmpRoot);
+		assert.equal(reaEnv.XDG_CACHE_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "cache"));
+		assert.equal(reaEnv.XDG_DATA_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "data"));
+		assert.equal(reaEnv.XDG_STATE_HOME, path.join(tmpRoot, "workspaces", ".rea-runtime", "state"));
+
+		// 6. Verify Pi CLI args explicitly pass --session-dir inside workspaces/<slug>/sessions
+		const piArgs = buildWoodchipperPiArgs([], "tui");
+		const sessionDirIdx = piArgs.indexOf("--session-dir");
+		assert.ok(sessionDirIdx !== -1, "Expected --session-dir to be passed to Pi");
+		assert.match(piArgs[sessionDirIdx + 1], /workspaces\/.*\/sessions$/);
+	} finally {
+		fs.rmSync(tmpRoot, { recursive: true, force: true });
 	}
 });

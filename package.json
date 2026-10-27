@@ -58,8 +58,9 @@
     "build:harness": "node --experimental-strip-types scripts/build-harness.mjs",
     "rea": "rea",
     "doctor": "GHIDRA_INSTALL_DIR=${GHIDRA_INSTALL_DIR:-$HOME/.local/share/ghidra/ghidra_12.1.4_PUBLIC} JAVA_HOME=${JAVA_HOME:-$HOME/.local/share/mise/installs/java/temurin-21.0.12+101.0.LTS} rea doctor --provider ghidra --skill --json",
-    "test": "node --experimental-strip-types --test tests/validate-woodchipper.test.mjs tests/pi-extension.test.mjs tests/peer-extension.test.mjs",
+    "test": "node --experimental-strip-types --test tests/validate-woodchipper.test.mjs tests/pi-extension.test.mjs tests/peer-extension.test.mjs tests/maximal-extension.test.mjs",
     "test:mutate": "node --experimental-strip-types scripts/mutation-test.mjs",
+    "smoke": "node --experimental-strip-types scripts/smoke-test.mjs",
     "validate": "node scripts/validate.mjs",
     "sync:skills": "node scripts/sync-to-stuffbucket-skills.mjs",
     "update:vendor": "node scripts/update-vendor.mjs"

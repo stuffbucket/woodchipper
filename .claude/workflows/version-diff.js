@@ -59,7 +59,7 @@ Separate real dependency/permission/asset changes from build-timestamp/ordinal n
     prompt: `Old version: ${oldPath}
 New version: ${newPath}
 Use REA to match and compare code between ${oldPath} and ${newPath}:
-- Native: list_procedures on both -> match_native_functions -> analyze_function on modified pairs -> compare_functions & find_changed_behavior.
+- Native: list_procedures on both -> analyze_function on modified pairs -> compare_functions & find_changed_behavior.
 - JS/Electron: analyze_javascript_application on both -> compare_application_versions & compare_javascript_export_shapes.
 - WASM: compare_wasm_interfaces.
 Identify added bounds checks, changed logic branches, and any sibling callers that missed a security patch.`,

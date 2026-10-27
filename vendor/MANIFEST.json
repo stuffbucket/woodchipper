@@ -34,6 +34,15 @@
       "commit": "cae8d69e572e038d584c881efd1818e40571fb7c",
       "submodule_path": "vendor/pi",
       "license": "MIT"
+    },
+    "gliner_runner": {
+      "repository": "https://github.com/stuffbucket/gliner-runner",
+      "package": "@gliner-runner/onnx-runner@0.4.0",
+      "commit": "76905f63137f7aaed3f85485301fee844377875a",
+      "submodule_path": "vendor/gliner-runner",
+      "default_model": "decide-340m",
+      "default_model_revision": "9d1bfb848cd16d93ee56ccbc59cd92bf0f284d90",
+      "license": "Apache-2.0"
     }
   }
 }

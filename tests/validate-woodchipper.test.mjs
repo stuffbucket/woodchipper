@@ -52,14 +52,21 @@ test('MCP and runtime hooks remain owned by project-local Pi configuration', () 
   for (const rel of [
     '.mcp.json',
     '.claude/settings.json',
-    '.claude/settings.local.json',
     '.claude/hooks',
     '.claude-plugin/hooks'
   ]) {
     assert.equal(fs.existsSync(path.join(ROOT, rel)), false, `${rel} must not configure Claude Code`)
   }
+  const localSettingsPath = path.join(ROOT, '.claude/settings.local.json')
+  if (fs.existsSync(localSettingsPath)) {
+    const localSettings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf8'))
+    assert.equal(Boolean(localSettings.mcpServers || localSettings.hooks), false)
+  }
 
   const piSettings = JSON.parse(fs.readFileSync(path.join(ROOT, '.pi', 'settings.json'), 'utf8'))
+  assert.equal(piSettings.defaultProvider, 'maximal')
+  assert.equal(piSettings.defaultModel, 'claude-sonnet-5-5-20260301')
+  assert.ok(piSettings.extensions.includes('./extensions/woodchipper-maximal.ts'))
   assert.ok(piSettings.extensions.includes('./extensions/woodchipper-rea.ts'))
 
   const reaExtension = fs.readFileSync(path.join(ROOT, '.pi', 'extensions', 'woodchipper-rea.ts'), 'utf8')
@@ -149,9 +156,68 @@ test('vendored upstream files and manifest are present', () => {
   assert.ok(fs.existsSync(manifestPath))
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   assert.equal(manifest.upstreams.rea.package, 'rea-agents@6.7.0')
+  assert.equal(manifest.upstreams.gliner_runner.package, '@gliner-runner/onnx-runner@0.4.0')
+  assert.equal(manifest.upstreams.gliner_runner.default_model, 'decide-340m')
+  assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'gliner-runner', 'packages', 'onnx-runner', 'package.json')))
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea-prompts', 'README.md')))
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea', 'contracts', 'toolContracts.ts')))
   assert.ok(fs.existsSync(path.join(ROOT, 'vendor', 'rea', 'skills', 'reverse-engineer-anything', 'SKILL.md')))
+})
+
+test('REA 6.7.0 tool contracts align with HIGH_VOLUME_REA_TOOLS, skills, playbooks, and workflows', async () => {
+  const { TOOL_CONTRACTS } = await import(path.join(ROOT, 'node_modules', 'rea-agents', 'dist', 'contracts', 'toolContracts.js'))
+  const { HIGH_VOLUME_REA_TOOLS } = await import(path.join(ROOT, '.pi', 'extensions', 'woodchipper-rea.ts'))
+
+  const validReaTools = new Set(TOOL_CONTRACTS.map((c) => c.name))
+  assert.equal(validReaTools.size, 207)
+
+  const detailCapableTools = TOOL_CONTRACTS
+    .filter((c) => Boolean(c.inputSchema?.shape && 'detail' in c.inputSchema.shape))
+    .map((c) => c.name)
+
+  assert.equal(detailCapableTools.length, 14)
+  for (const toolName of detailCapableTools) {
+    assert.ok(HIGH_VOLUME_REA_TOOLS.has(toolName), `Expected HIGH_VOLUME_REA_TOOLS to contain ${toolName}`)
+  }
+  for (const toolName of HIGH_VOLUME_REA_TOOLS) {
+    assert.ok(validReaTools.has(toolName), `Expected ${toolName} to exist in rea-agents@6.7.0 TOOL_CONTRACTS`)
+  }
+
+  const forbiddenRemovedTools = [
+    'inspect_desktop_application',
+    'open_bundle_resources',
+    'inspect_elf_notes',
+    'inspect_byte_entropy',
+    'inspect_il2cpp_metadata',
+    'inspect_gpu_code_objects',
+    'inspect_model_artifact',
+    'match_native_functions'
+  ]
+
+  const filesToScan = [
+    path.join(ROOT, 'CLAUDE.md'),
+    path.join(ROOT, 'AGENTS.md'),
+    path.join(ROOT, '.pi', 'SYSTEM.md'),
+    path.join(ROOT, '.pi', 'extensions', 'woodchipper-rea.ts'),
+    path.join(ROOT, '.pi', 'extensions', 'lib', 'triage.ts'),
+    ...EXPECTED_SKILLS.map((s) => path.join(ROOT, 'skills', s, 'SKILL.md')),
+    ...EXPECTED_WORKFLOWS.map((w) => path.join(ROOT, '.claude', 'workflows', w)),
+    path.join(ROOT, 'playbooks', 'triage-and-feature-trace.md'),
+    path.join(ROOT, 'playbooks', 'clean-room-and-porting.md'),
+    path.join(ROOT, 'playbooks', 'security-and-vr.md'),
+    path.join(ROOT, 'playbooks', 'firmware-and-protocols.md')
+  ]
+
+  for (const filePath of filesToScan) {
+    const text = fs.readFileSync(filePath, 'utf8')
+    for (const bad of forbiddenRemovedTools) {
+      assert.equal(
+        text.includes(bad),
+        false,
+        `Non-existent REA 6.7.0 tool '${bad}' must not appear in ${path.relative(ROOT, filePath)}`
+      )
+    }
+  }
 })
 
 test('documentation site has pinned dependencies, examples, and a Pages workflow', () => {

@@ -6,9 +6,13 @@ import * as path from "node:path";
 
 /**
  * Resolve default REA provider environment (Ghidra 12.1.4 + Temurin JDK 21)
- * when not already set in `process.env`.
+ * and isolate XDG cache/state/data directories inside `<projectRoot>/workspaces/.rea-runtime`
+ * so REA and headless Ghidra never leak state into global user XDG directories.
  */
-export function resolveReaProviderEnv(baseEnv: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function resolveReaProviderEnv(
+	baseEnv: NodeJS.ProcessEnv = process.env,
+	projectRoot?: string,
+): Record<string, string> {
 	const home = os.homedir();
 	const defaultGhidraDir = path.join(home, ".local", "share", "ghidra", "ghidra_12.1.4_PUBLIC");
 	const defaultJavaHome = path.join(home, ".local", "share", "mise", "installs", "java", "temurin-21.0.12+101.0.LTS");
@@ -25,6 +29,19 @@ export function resolveReaProviderEnv(baseEnv: NodeJS.ProcessEnv = process.env):
 	}
 	if (!env.GHIDRA_HEADLESS_MAXMEM) {
 		env.GHIDRA_HEADLESS_MAXMEM = "4G";
+	}
+	if (projectRoot) {
+		const runtimeDir = path.join(projectRoot, "workspaces", ".rea-runtime");
+		try {
+			fs.mkdirSync(path.join(runtimeDir, "cache"), { recursive: true });
+			fs.mkdirSync(path.join(runtimeDir, "data"), { recursive: true });
+			fs.mkdirSync(path.join(runtimeDir, "state"), { recursive: true });
+		} catch {
+			// Ignore on read-only filesystems
+		}
+		env.XDG_CACHE_HOME = path.join(runtimeDir, "cache");
+		env.XDG_DATA_HOME = path.join(runtimeDir, "data");
+		env.XDG_STATE_HOME = path.join(runtimeDir, "state");
 	}
 	return env;
 }
@@ -190,6 +207,30 @@ export function computeSha256(resolvedPath: string, stat: fs.Stats): string | nu
 	}
 }
 
+/**
+ * Extract the first existing file or directory path mentioned in a free-form user prompt
+ * (e.g. "What is /bin/ls?" or "Look at tests/fixtures/sample-electron-app").
+ */
+export function extractExistingTargetPathFromPrompt(prompt: string, baseDir: string): string | null {
+	if (!prompt || typeof prompt !== "string") return null;
+	// Strip surrounding quotes/backticks/punctuation from path-like tokens
+	const tokens = prompt.split(/\s+/);
+	for (const raw of tokens) {
+		const cleaned = raw.replace(/^[`"'([<]+|[`"')\]>.,;:!?]+$/g, "");
+		if (!cleaned || cleaned.startsWith("-") || cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+			continue;
+		}
+		if (cleaned.includes("/") || /\.(?:exe|dll|sys|so|dylib|app|apk|ipa|asar|js|mjs|wasm|bin|img|fw|pcap|pcapng|sqlite|db|plist|har|saz|core|dmp)$/i.test(cleaned)) {
+			const expanded = cleaned.startsWith("~/") ? path.join(os.homedir(), cleaned.slice(2)) : cleaned;
+			const resolved = path.resolve(baseDir, expanded);
+			if (fs.existsSync(resolved) && resolved !== path.resolve(baseDir)) {
+				return resolved;
+			}
+		}
+	}
+	return null;
+}
+
 export function runStaticTriage(targetPath: string, baseDir: string): StaticTriageResult {
 	const resolvedPath = path.resolve(baseDir, targetPath);
 	if (!fs.existsSync(resolvedPath)) {
@@ -238,17 +279,16 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 		recommendedSubSkill = "woodchipper-mobile-managed";
 		secondarySubSkills.unshift("woodchipper-native", "woodchipper-js-web");
 		targetFreeToolsFirst.push(
-			'open_bundle_resources({ path: "<target>" })',
 			'inspect_plist({ path: "<target>/Contents/Info.plist" })',
-			'inspect_desktop_application({ path: "<target>", detail: "summary" })',
+			'analyze_javascript_application({ input_path: "<target>/Contents/Resources/app.asar", detail: "summary" })',
 		);
 		initialReaToolSequence.push(
-			"1. open_bundle_resources & inspect_plist to identify bundle ID, main executable, and Electron/Flutter/native frameworks",
-			'2. inspect_desktop_application({ path, detail: "summary" }) -> inspect_analysis_view for bundle layout',
-			'3. If Electron (Contents/Resources/app.asar present), switch to woodchipper-js-web and run analyze_javascript_application({ detail: "summary" })',
-			'4. If native Mach-O executable, run inspect_macho({ detail: "summary" }) before open_binary',
+			"1. inspect_plist({ path: '<target>/Contents/Info.plist' }) to identify bundle ID, main executable, and Electron/Flutter/native frameworks",
+			'2. open_binary({ path }) -> inspect_artifact({ detail: "summary" }) -> project_apple_application_graph for bundle layout',
+			'3. If Electron (Contents/Resources/app.asar present), switch to woodchipper-js-web and run analyze_javascript_application({ input_path, detail: "summary" })',
+			'4. If native Mach-O executable, open_binary({ path }) -> inspect_macho({ detail: "summary" })',
 		);
-		notes.push("macOS/iOS .app bundle detected; inspect bundle resources and Info.plist before opening the main binary.");
+		notes.push("macOS/iOS .app bundle detected; inspect Info.plist and bundle artifact layout before decompiling the main binary.");
 	} else if (isDirectory) {
 		const entries = fs.readdirSync(resolvedPath);
 		const hasAsar = entries.some((e) => e.endsWith(".asar") || e === "resources");
@@ -256,21 +296,20 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 		if (hasAsar || hasJs) {
 			recommendedSubSkill = "woodchipper-js-web";
 			targetFreeToolsFirst.push(
-				'analyze_javascript_application({ path: "<target>", detail: "summary" })',
-				'inspect_desktop_application({ path: "<target>", detail: "summary" })',
+				'analyze_javascript_application({ input_path: "<target>", detail: "summary" })',
 			);
 			initialReaToolSequence.push(
-				'1. analyze_javascript_application({ path, detail: "summary" }) -> save parent_evidence_id',
-				'2. inspect_analysis_view({ parent_evidence_id, view: { kind: "modules" } })',
-				'3. trace_application_feature({ path, direction: "outgoing" })',
+				'1. analyze_javascript_application({ input_path, detail: "summary" }) -> save parent_evidence_id',
+				'2. inspect_analysis_view({ source: { kind: "retained-evidence", evidence_id: "<parent_evidence_id>" }, view: { kind: "page", collection: "modules" } })',
+				'3. trace_application_feature({ application: { kind: "retained-evidence", evidence_id: "<parent_evidence_id>" }, seed: { type: "module-id", value: "<node_id>" }, direction: "outgoing" })',
 			);
 			notes.push("Directory appears to contain JavaScript/Electron application artifacts.");
 		} else {
 			recommendedSubSkill = "woodchipper-native";
-			targetFreeToolsFirst.push('inspect_desktop_application({ path: "<target>", detail: "summary" })');
+			targetFreeToolsFirst.push('inspect_binary_layout({ path: "<target>/<primary-binary>", detail: "summary" })');
 			initialReaToolSequence.push(
-				'1. inspect_desktop_application({ path, detail: "summary" }) to inventory binaries and resources',
-				"2. Run woodchipper_triage on the primary executable inside the directory",
+				'1. open_binary({ path }) -> inspect_artifact({ detail: "summary" }) or run woodchipper_triage on the primary executable inside the directory',
+				"2. Run target-free metadata tools (inspect_binary_layout, inspect_go_binary, inspect_rust_binary, inspect_pe_resources) on the primary binary",
 			);
 			notes.push(`Directory with ${entries.length} top-level entries.`);
 		}
@@ -286,20 +325,20 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 	) {
 		recommendedSubSkill = "woodchipper-js-web";
 		if (ext === ".har" || ext === ".saz") {
-			targetFreeToolsFirst.push('inspect_web_network_capture({ path: "<target>", detail: "summary" })');
+			targetFreeToolsFirst.push('inspect_web_network_capture({ capture_path: "<target>", detail: "summary" })');
 			initialReaToolSequence.push(
-				'1. inspect_web_network_capture({ path, detail: "summary" }) -> save parent_evidence_id',
-				"2. inspect_analysis_view to page endpoints, auth headers, and payload schemas",
+				'1. inspect_web_network_capture({ capture_path, detail: "summary" }) -> save parent_evidence_id',
+				'2. inspect_analysis_view({ source: { kind: "retained-evidence", evidence_id: "<parent_evidence_id>" }, view: { kind: "capture", detail: "preview" } }) to page endpoints, auth headers, and payload schemas',
 			);
 		} else {
-			targetFreeToolsFirst.push('analyze_javascript_application({ path: "<target>", detail: "summary" })');
+			targetFreeToolsFirst.push('analyze_javascript_application({ input_path: "<target>", detail: "summary" })');
 			if (ext === ".asar") {
 				targetFreeToolsFirst.push('inspect_electron_fuses({ path: "<target>" })');
 			}
 			initialReaToolSequence.push(
-				'1. analyze_javascript_application({ path, detail: "summary" }) (target-free; do NOT call open_binary)',
-				'2. inspect_analysis_view({ parent_evidence_id, view: { kind: "modules" } }) or view: { kind: "api-surface" }',
-				'3. trace_application_feature({ path, direction: "outgoing" }) on target entry module/IPC channel',
+				'1. analyze_javascript_application({ input_path, detail: "summary" }) (target-free; do NOT call open_binary)',
+				'2. inspect_analysis_view({ source: { kind: "retained-evidence", evidence_id: "<parent_evidence_id>" }, view: { kind: "page", collection: "modules" } }) or view: { kind: "api-surface" }',
+				'3. trace_application_feature({ application: { kind: "retained-evidence", evidence_id: "<parent_evidence_id>" }, seed: { type: "module-id", value: "<node_id>" }, direction: "outgoing" })',
 			);
 		}
 	} else if (
@@ -321,34 +360,34 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 		recommendedSubSkill = "woodchipper-mobile-managed";
 		if (ext === ".apk" || ext === ".aab" || ext === ".dex" || lowerDesc.includes("dalvik")) {
 			targetFreeToolsFirst.push(
-				'inspect_android_package({ path: "<target>" })',
+				'inspect_android_package({ path: "<target>", detail: "summary" })',
 				'decode_android_resources({ path: "<target>" })',
 				'identify_flutter_build({ path: "<target>" })',
 			);
 			initialReaToolSequence.push(
-				"1. inspect_android_package({ path }) to enumerate manifest, permissions, and exported components (target-free)",
+				'1. inspect_android_package({ path, detail: "summary" }) to enumerate manifest, permissions, and exported components (target-free)',
 				"2. search_android_classes / trace_android_references via JADX provider if available",
-				"3. Check lib/ for native JNI or Flutter/Unity IL2CPP artifacts (identify_flutter_build / inspect_il2cpp_metadata)",
+				"3. Check lib/ for native JNI or Flutter/Dart AOT artifacts (identify_flutter_build / inspect_dart_aot)",
 			);
 		} else if (baseName === "global-metadata.dat") {
-			targetFreeToolsFirst.push('inspect_il2cpp_metadata({ path: "<target>" })');
+			targetFreeToolsFirst.push('inspect_binary_layout({ path: "<target>", detail: "summary" })');
 			initialReaToolSequence.push(
-				"1. inspect_il2cpp_metadata({ path }) to recover IL2CPP string literals, types, and method descriptors",
-				"2. Correlate recovered metadata with GameAssembly.dll / libil2cpp.so via woodchipper-native",
+				"1. Open GameAssembly.dll / libil2cpp.so via open_binary and correlate string/symbol tables (search_strings / list_names)",
+				"2. Inspect global-metadata.dat structure via read_bytes / search_strings in woodchipper-native",
 			);
 		} else if (lowerDesc.includes(".net") || lowerDesc.includes("mono/")) {
 			targetFreeToolsFirst.push(
 				'inspect_managed_artifact({ path: "<target>", detail: "summary" })',
-				'inspect_managed_members({ path: "<target>" })',
+				'inspect_managed_members({ path: "<target>", detail: "summary" })',
 			);
 			initialReaToolSequence.push(
 				'1. inspect_managed_artifact({ path, detail: "summary" }) (target-free; do NOT call open_binary)',
-				"2. inspect_managed_members to inspect namespaces, types, and CIL methods",
+				'2. inspect_managed_members({ path, detail: "summary" }) to inspect namespaces, types, and CIL methods',
 			);
 		} else {
-			targetFreeToolsFirst.push('inspect_plist({ path: "<target>" })', 'open_bundle_resources({ path: "<target>" })');
+			targetFreeToolsFirst.push('inspect_plist({ path: "<target>" })', 'inspect_keyed_archive({ path: "<target>" })');
 			initialReaToolSequence.push(
-				"1. inspect_plist / decode_interface_builder / inspect_asset_catalog on Apple resource artifact",
+				'1. inspect_plist({ path }) or open_binary({ path }) -> decode_interface_builder({ detail: "summary" }) / inspect_asset_catalog on Apple resource artifact',
 			);
 		}
 	} else if (
@@ -388,20 +427,20 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 				"1. inspect_sqlite_database({ path }) (target-free) to recover tables, indices, triggers, and schema",
 			);
 		} else if (ext === ".pcap" || ext === ".pcapng" || lowerDesc.includes("pcap")) {
-			targetFreeToolsFirst.push('inspect_pcap_capture({ path: "<target>" })');
+			targetFreeToolsFirst.push('inspect_pcap_capture({ path: "<target>", detail: "summary" })');
 			initialReaToolSequence.push(
-				"1. inspect_pcap_capture({ path }) / inspect_packet_capture to summarize conversations and protocols",
+				'1. inspect_pcap_capture({ path, detail: "summary" }) / inspect_packet_capture to summarize conversations and protocols',
 			);
 		} else if (ext === ".sr" || ext === ".sal") {
 			targetFreeToolsFirst.push('decode_signal_recording({ path: "<target>" })');
 			initialReaToolSequence.push("1. decode_signal_recording({ path }) to inspect logic analyzer protocol frames");
 		} else {
 			targetFreeToolsFirst.push(
-				'inspect_byte_entropy({ path: "<target>" })',
 				'inspect_firmware_regions({ path: "<target>" })',
+				'inspect_binary_layout({ path: "<target>", detail: "summary" })',
 			);
 			initialReaToolSequence.push(
-				"1. inspect_byte_entropy({ path }) & inspect_firmware_regions({ path }) to locate partitions, bootloaders, and compressed filesystems",
+				"1. inspect_firmware_regions({ path }) to locate partitions, bootloaders, and compressed filesystems",
 				"2. extract_firmware into a dedicated empty directory if embedded filesystems are found",
 				'3. For headerless MCU blobs, call open_binary with format: "raw-binary" and explicit architecture/entry_point',
 			);
@@ -416,10 +455,12 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 	) {
 		recommendedSubSkill = "woodchipper-native";
 		targetFreeToolsFirst.push(
-			'inspect_model_artifact({ path: "<target>" })',
-			'inspect_gpu_code_objects({ path: "<target>" })',
+			'inspect_binary_layout({ path: "<target>", detail: "summary" })',
+			'inspect_with_objdump({ path: "<target>" })',
 		);
-		initialReaToolSequence.push("1. inspect_model_artifact({ path }) or inspect_gpu_code_objects({ path }) (target-free)");
+		initialReaToolSequence.push(
+			'1. inspect_binary_layout({ path, detail: "summary" }) or open_binary({ path }) -> inspect_artifact({ detail: "summary" })',
+		);
 	} else if (lowerDesc.includes("core file") || ext === ".core" || ext === ".dmp") {
 		recommendedSubSkill = "woodchipper-audit";
 		recommendedPlaybook = "security-and-vr";
@@ -433,15 +474,14 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 		recommendedSubSkill = "woodchipper-native";
 		if (lowerDesc.includes("mach-o")) {
 			targetFreeToolsFirst.push(
-				'inspect_macho({ path: "<target>", detail: "summary" })',
 				'inspect_binary_layout({ path: "<target>", detail: "summary" })',
 				'inspect_go_binary({ path: "<target>" })',
 				'inspect_rust_binary({ path: "<target>" })',
 			);
 		} else if (lowerDesc.includes("elf")) {
 			targetFreeToolsFirst.push(
-				'inspect_elf_notes({ path: "<target>" })',
 				'inspect_binary_layout({ path: "<target>", detail: "summary" })',
+				'inspect_with_objdump({ path: "<target>" })',
 				'inspect_go_binary({ path: "<target>" })',
 				'inspect_rust_binary({ path: "<target>" })',
 			);
@@ -459,14 +499,14 @@ export function runStaticTriage(targetPath: string, baseDir: string): StaticTria
 		} else {
 			targetFreeToolsFirst.push(
 				'inspect_binary_layout({ path: "<target>", detail: "summary" })',
-				'inspect_byte_entropy({ path: "<target>" })',
+				'inspect_firmware_regions({ path: "<target>" })',
 			);
 		}
 
 		initialReaToolSequence.push(
-			'1. Run target-free metadata tools FIRST (inspect_binary_layout with detail: "summary", inspect_macho / inspect_elf_notes / inspect_pe_resources, inspect_go_binary, inspect_rust_binary)',
+			'1. Run target-free metadata tools FIRST (inspect_binary_layout with detail: "summary", inspect_pe_resources / inspect_with_objdump, inspect_go_binary, inspect_rust_binary)',
 			"2. Save parent_evidence_id and page sections/symbols via inspect_analysis_view",
-			"3. Only when procedure decompilation or xrefs are needed: call open_binary -> search_strings / search_procedures -> analyze_function",
+			'3. When Mach-O load commands, archive layout, or procedure decompilation are needed: call open_binary -> inspect_macho / inspect_artifact (detail: "summary") -> search_strings / search_procedures -> analyze_function',
 		);
 	}
 

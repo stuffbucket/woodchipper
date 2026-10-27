@@ -29,10 +29,9 @@ bundles, and PyInstaller or archive containers.
 ## 2. Game Engines: Flutter, Unity IL2CPP & Godot PCK
 
 - **Flutter APKs (Built-in Static):**
-  - Call `identify_flutter_build` and `inspect_dart_aot` directly on the APK (no Flutter SDK needed) to recover Dart snapshot hashes, per-ABI `libapp.so`/`libflutter.so` digests, and engine build provenance.
-- **Unity IL2CPP (`global-metadata.dat` — Built-in Static):**
-  - Call `inspect_il2cpp_metadata` on `global-metadata.dat` (supports v24, 27, 29, 31, 39; pass optional matching `binary_path` for `GameAssembly.dll`/`.so`).
-  - Query `images`, `types`, `methods`, `fields`, `parameters` (supports batch `method_indices`), `string_literals`, and `method_addresses` via `inspect_analysis_view` using `parent_evidence_id`.
+  - Call `identify_flutter_build` and `inspect_dart_aot` (`detail: "summary"`) directly on the APK (no Flutter SDK needed) to recover Dart snapshot hashes, per-ABI `libapp.so`/`libflutter.so` digests, and engine build provenance.
+- **Unity IL2CPP (`GameAssembly.dll` / `libil2cpp.so` + `global-metadata.dat`):**
+  - Open `GameAssembly.dll` or `libil2cpp.so` with `open_binary` and correlate recovered string literals and symbol names (`search_strings`, `list_names`, `inspect_binary_layout`) against `global-metadata.dat`.
 - **Godot PCK Archives (Built-in Static v2, v3, v4):**
   - Call `open_binary` then `inspect_artifact` (`detail: "summary"`), or CLI `inspect-artifact --detail summary --evidence_output PATH` (which also detects embedded EOF-trailer PCKs). Page via `inspect_analysis_view` (`kind: "inventory"`).
 
@@ -47,10 +46,11 @@ bundles, and PyInstaller or archive containers.
 
 ## 4. Apple Bundles (`.app`, IPA, DMG) & PyInstaller
 
-- **Apple Resources Without Deep Disassembler (`open_bundle_resources`):**
-  - Call `open_bundle_resources` on the `.app` path, then use `inspect_plist`, `decode_interface_builder` (NIB/Storyboard), `inspect_asset_catalog` (`Assets.car`), or `inspect_keyed_archive`.
+- **Apple Plists, Keyed Archives, NIBs & Asset Catalogs:**
+  - Target-free plist/archive inspection: call `inspect_plist` (`path`) or `inspect_keyed_archive` (`path`).
+  - Active-session bundle resource inspection: call `open_binary` on the `.app` or resource file, then use `decode_interface_builder` (`detail: "summary"`, NIB/Storyboard) or `inspect_asset_catalog` (`Assets.car`).
 - **Apple Bundle Graph & Dylib Resolution:**
-  - Call `open_binary` + `inspect_artifact`, then pass the inventory to `project_apple_application_graph` to map XPC services, app extensions, frameworks, and privileged helpers.
+  - Call `open_binary` + `inspect_artifact` (`detail: "summary"`), then pass the inventory to `project_apple_application_graph` to map XPC services, app extensions, frameworks, and privileged helpers.
   - Call `trace_dylib_resolution` to resolve `@rpath`, `@loader_path`, and `@executable_path` across the bundle.
 - **PyInstaller Executables & General Archives (ZIP/APK/IPA/MSIX/DMG):**
   - Call `open_binary` on the executable or archive, then `inspect_artifact` (`detail: "summary"`). For PyInstaller, the CArchive is the application layer (the native prefix is just the bootloader). Call `extract_artifact` when materialized files are needed in an owned temp folder.
