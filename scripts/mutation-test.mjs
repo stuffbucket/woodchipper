@@ -206,6 +206,14 @@ const MUTANTS = [
 		replacement: "if (false && typeof ctx?.shutdown === \"function\") {\n\t\t\t\tctx.shutdown();\n\t\t\t}",
 		testFile: "tests/pi-extension.test.mjs",
 	},
+	{
+		id: "M24_OVERSIZED_TOOL_RESULT_CAP",
+		description: "Disable oversized REA tool result truncation in capOversizedReaToolText()",
+		file: ".pi/extensions/woodchipper-rea.ts",
+		target: "if (text.length <= maxChars) {\n\t\treturn { text, truncated: false };\n\t}",
+		replacement: "if (true || text.length <= maxChars) {\n\t\treturn { text, truncated: false };\n\t}",
+		testFile: "tests/pi-extension.test.mjs",
+	},
 ];
 
 function runTestFile(relTestFile) {
