@@ -141,14 +141,6 @@ footer {
   padding-block: clamp(3rem, 9vw, 7rem);
 }
 
-.eyebrow {
-  margin: 0 0 0.8rem;
-  color: var(--accent-strong);
-  font: 700 0.78rem/1.2 var(--mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 h1,
 h2,
 h3 {

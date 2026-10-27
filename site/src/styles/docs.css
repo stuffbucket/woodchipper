@@ -28,6 +28,15 @@
   --sl-color-black: #121814;
 }
 
+a.site-title {
+  color: var(--sl-color-white);
+  font-family: var(--sl-font);
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.6;
+}
+
 .sl-markdown-content {
   line-height: 1.65;
 }
