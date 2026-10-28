@@ -65,7 +65,7 @@ export interface InboundPeerPrompt {
 export interface A2ARequest {
 	type: "a2a";
 	id?: string;
-	action: "prompt" | "steer" | "status" | "ledger" | "ping";
+	action: "prompt" | "steer" | "status" | "ledger" | "ping" | "flow_status" | "flow_halt";
 	message?: string;
 }
 
@@ -74,6 +74,8 @@ export interface PeerServerCallbacks {
 	onRename?: (newName: string) => void;
 	getStatus?: () => Record<string, unknown>;
 	getLedgerSummary?: () => Record<string, unknown>;
+	getFlowStatus?: () => Record<string, unknown> | null;
+	onFlowHalt?: (summary?: string) => Record<string, unknown> | null;
 }
 
 export function getClaudeSessionsDir(overrideDir?: string): string {
@@ -967,6 +969,44 @@ export class WoodchipperPeerServer {
 								id: req.id,
 								ok: true,
 								ledger,
+							})}\n`,
+						);
+						client.end();
+					}
+				} catch {
+					// Ignore
+				}
+				return false;
+			}
+			if (req.action === "flow_status") {
+				const flow = this.callbacks.getFlowStatus ? this.callbacks.getFlowStatus() : null;
+				try {
+					if (client.writable) {
+						client.write(
+							`${JSON.stringify({
+								type: "a2a_response",
+								id: req.id,
+								ok: true,
+								flow,
+							})}\n`,
+						);
+						client.end();
+					}
+				} catch {
+					// Ignore
+				}
+				return false;
+			}
+			if (req.action === "flow_halt") {
+				const flow = this.callbacks.onFlowHalt ? this.callbacks.onFlowHalt(req.message) : null;
+				try {
+					if (client.writable) {
+						client.write(
+							`${JSON.stringify({
+								type: "a2a_response",
+								id: req.id,
+								ok: true,
+								flow,
 							})}\n`,
 						);
 						client.end();

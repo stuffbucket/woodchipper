@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (`claude.ai/code`) and 5.5-series Cla
 `woodchipper` combines:
 1. **`morluto/rea` (`rea-agents@6.7.0`)** — the Reverse Engineer Anything MCP server (`207` MCP tools, `153` CLI commands, `6` guided prompts), contracts, bridges, and reference documentation (`vendor/rea/`).
 2. **`JoasASantos/REA-Prompts` (REAP)** — the human-to-agent reverse-engineering prompt catalog (`vendor/rea-prompts/README.md`).
-3. **`earendil-works/pi` (`@earendil-works/pi-coding-agent@1.4.0`)** — vendored as a Git submodule at `vendor/pi` and customized via `.pi/extensions/` (`woodchipper-maximal.ts`, `woodchipper-rea.ts`, `woodchipper-peer.ts`), `.pi/SYSTEM.md`, `.pi/settings.json`, `bin/woodchipper.mjs`, and `scripts/woodchipper-ctl.mjs`.
+3. **`earendil-works/pi` (`@earendil-works/pi-coding-agent@1.4.0`)** — vendored as a Git submodule at `vendor/pi` and customized via `.pi/extensions/` (`woodchipper-maximal.ts`, `woodchipper-rea.ts`, `woodchipper-peer.ts`, and standalone flow-control extension `pi-flow.ts`), `.pi/SYSTEM.md`, `.pi/settings.json`, `bin/woodchipper.mjs`, and `scripts/woodchipper-ctl.mjs`.
 4. **`stuffbucket/gliner-runner` (`@gliner-runner/onnx-runner@0.4.0`, `decide-340m`)** — vendored as a Git submodule at `vendor/gliner-runner` and wired via `.pi/extensions/lib/gliner-classifier.ts` (`woodchipper_classify` tool & `/gliner` command) to auto-pull `decide-340m` when missing and classify plain-English user questions and binary strings/imports without requiring reverse-engineering domain knowledge.
 
 And reorganizes them into a **dual-surface Pi reverse-engineering harness** (interactive human TUI + native Claude Code `peerProtocol: 1` A2A socket), a **progressive-disclosure skill pack (`skills/woodchipper*`)**, **deterministic multi-agent workflows (`.claude/workflows/*.js`)**, and **structured playbooks (`playbooks/*.md`)** tailored for Claude 5.5-series models.
@@ -39,6 +39,8 @@ mise run daemon       # or: pnpm run daemon
 
 # Control or message Woodchipper / Claude Code peers over UDS
 mise run ctl -- peers
+mise run ctl -- status woodchipper
+mise run ctl -- halt woodchipper "Stop active flow"
 mise run ctl -- send woodchipper "Triage /path/to/binary" --wait
 
 # Run REA environment & backend readiness check (Ghidra 12.1.4 + Skill Identity)
@@ -47,7 +49,7 @@ mise run doctor       # or: pnpm run doctor
 # Validate skills, workflows, Pi harness extensions, and vendor manifest
 mise run validate     # or: pnpm run validate
 
-# Run test suite and 13-mutant security/logic mutation suite
+# Run test suite (39 tests) and 28-mutant security/logic mutation suite
 mise run test         # or: pnpm test
 mise run test:mutate  # or: pnpm run test:mutate
 

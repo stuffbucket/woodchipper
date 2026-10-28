@@ -22,7 +22,8 @@
   "extensions": [
     "./extensions/woodchipper-maximal.ts",
     "./extensions/woodchipper-rea.ts",
-    "./extensions/woodchipper-peer.ts"
+    "./extensions/woodchipper-peer.ts",
+    "./extensions/pi-flow.ts"
   ],
   "skills": [
     "../skills"

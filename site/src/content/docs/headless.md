@@ -23,11 +23,14 @@ In another terminal:
 mise run ctl -- peers
 ```
 
-## Check status
+## Check status or halt an active flow
 
 ```sh
 mise run ctl -- status woodchipper
+mise run ctl -- halt woodchipper "Stop active monitor"
 ```
+
+When a background `/loop`, `/monitor` (`/watch`), or `/mapreduce` flow is running in `pi-flow`, the peer remains in `busy` state until the flow completes or `halt` is sent, so `notify_when_idle` subscribers are woken only when the flow settles to `IDLE`.
 
 ## Send a task
 

@@ -33,6 +33,19 @@ export default function woodchipperPeerExtension(pi: ExtensionAPI): void {
 	const projectRoot = resolveProjectRoot();
 	const ledger = new EvidenceLedger(projectRoot);
 	let peerServer: WoodchipperPeerServer | null = null;
+	let latestFlowSnapshot: Record<string, unknown> | null = null;
+
+	const bus = (pi as unknown as { events?: { on?: (ev: string, fn: (data: any) => void) => void; emit?: (ev: string, data: unknown) => void } }).events;
+	bus?.on?.("flow:state", (evt: { state?: string; summary?: string; snapshot?: Record<string, unknown> } | undefined) => {
+		if (evt?.snapshot) {
+			latestFlowSnapshot = evt.snapshot;
+		}
+		if (evt?.state === "POLLING" || evt?.state === "SPAWNING") {
+			peerServer?.setBusy();
+		} else if (evt?.state === "IDLE" && evt?.summary) {
+			void peerServer?.setIdleAndNotify(evt.summary);
+		}
+	});
 
 	pi.registerFlag("peer-name", {
 		description: "Custom peer name registered in ~/.claude/sessions for Claude Code ListAgents/SendMessage",
@@ -46,7 +59,11 @@ export default function woodchipperPeerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		const noPeer = Boolean(pi.getFlag("no-peer")) || process.env.WOODCHIPPER_NO_PEER === "1";
+		const flowDepth = Number.parseInt(String(process.env.PI_FLOW_DEPTH || "0"), 10);
+		const noPeer =
+			Boolean(pi.getFlag("no-peer")) ||
+			process.env.WOODCHIPPER_NO_PEER === "1" ||
+			(Number.isFinite(flowDepth) && flowDepth > 0);
 		if (noPeer) return;
 
 		const flagName = typeof pi.getFlag("peer-name") === "string" ? (pi.getFlag("peer-name") as string).trim() : "";
@@ -78,6 +95,7 @@ export default function woodchipperPeerExtension(pi: ExtensionAPI): void {
 					return {
 						cwd: ctx?.cwd || projectRoot,
 						ledgerCounts: ledger.getCounts(),
+						...(latestFlowSnapshot ? { flow: latestFlowSnapshot } : {}),
 					};
 				},
 				getLedgerSummary: () => {
@@ -86,6 +104,18 @@ export default function woodchipperPeerExtension(pi: ExtensionAPI): void {
 						counts: ledger.getCounts(),
 						markdown: ledger.formatMarkdownReport(),
 					};
+				},
+				getFlowStatus: () => {
+					bus?.emit?.("flow:cmd:status", {
+						reply: (snap: Record<string, unknown>) => {
+							latestFlowSnapshot = snap;
+						},
+					});
+					return latestFlowSnapshot;
+				},
+				onFlowHalt: (summary?: string) => {
+					bus?.emit?.("flow:cmd:halt", { summary: summary || "Halted via A2A control signal." });
+					return latestFlowSnapshot;
 				},
 			},
 		});
@@ -148,6 +178,10 @@ export default function woodchipperPeerExtension(pi: ExtensionAPI): void {
 
 	pi.on("agent_settled", async (event) => {
 		const aborted = Boolean((event as unknown as { aborted?: boolean })?.aborted);
+		const flowState = (latestFlowSnapshot as { state?: string } | null)?.state;
+		if (!aborted && (flowState === "POLLING" || flowState === "SPAWNING")) {
+			return;
+		}
 		await peerServer?.setIdleAndNotify(undefined, { aborted });
 	});
 

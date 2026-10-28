@@ -222,6 +222,30 @@ const MUTANTS = [
 		replacement: "if (false && typeof ctx?.newSession === \"function\") {\n\t\t\tawait ctx.newSession();\n\t\t}",
 		testFile: "tests/pi-extension.test.mjs",
 	},
+	{
+		id: "M26_FLOW_MAPREDUCE_DEPTH_GUARD",
+		description: "Disable flowDepth >= 1 recursion guard in runMapReduceSequential()",
+		file: ".pi/extensions/lib/pi-flow/runners.ts",
+		target: "if (lineage.flowDepth >= 1) {",
+		replacement: "if (false && lineage.flowDepth >= 1) {",
+		testFile: "tests/pi-flow.test.mjs",
+	},
+	{
+		id: "M27_FLOW_BASH_DISABLED_GUARD",
+		description: "Allow command predicates to run when bash tool is disabled",
+		file: ".pi/extensions/lib/pi-flow/runners.ts",
+		target: "if (!ctx.activeTools.includes(\"bash\") || depth > 0) {",
+		replacement: "if (false && (!ctx.activeTools.includes(\"bash\") || depth > 0)) {",
+		testFile: "tests/pi-flow.test.mjs",
+	},
+	{
+		id: "M28_FLOW_ANCESTOR_DEADLOCK_GUARD",
+		description: "Disable ancestor PID deadlock guard in checkTargetPidAllowed()",
+		file: ".pi/extensions/lib/pi-flow/process-tree.ts",
+		target: "if (lineage.ancestorPids.has(targetPid)) {",
+		replacement: "if (false && lineage.ancestorPids.has(targetPid)) {",
+		testFile: "tests/pi-flow.test.mjs",
+	},
 ];
 
 function runTestFile(relTestFile) {

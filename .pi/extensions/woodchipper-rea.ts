@@ -128,6 +128,13 @@ export const NON_REA_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
 	"woodchipper_playbook",
 	"woodchipper_classify",
 	"claude_peers",
+	"flow_goal",
+	"flow_branch",
+	"flow_loop",
+	"flow_monitor",
+	"flow_mapreduce",
+	"flow_halt",
+	"flow_status",
 ]);
 
 /**
