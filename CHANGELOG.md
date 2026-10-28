@@ -2,6 +2,14 @@
 
 All notable changes to `@stuffbucket/woodchipper` are documented in this file.
 
+## [1.0.2](https://github.com/stuffbucket/woodchipper/compare/v1.0.1...v1.0.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **ci:** normalize Pi overlay tarball URLs and streamline release workflow ([c2eff3e](https://github.com/stuffbucket/woodchipper/commit/c2eff3ef6e59285a51aa67b0cfeb051157bc3a12))
+* **ci:** normalize Pi overlay tarball URLs and streamline release workflow ([25fee44](https://github.com/stuffbucket/woodchipper/commit/25fee44caf40d29df27f0306c043028409e25728))
+
 ## [1.0.1](https://github.com/stuffbucket/woodchipper/compare/v1.0.0...v1.0.1) (2026-10-28)
 
 
