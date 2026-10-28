@@ -193,10 +193,12 @@ test('REA 6.7.0 tool contracts align with HIGH_VOLUME_REA_TOOLS, skills, playboo
     'inspect_il2cpp_metadata',
     'inspect_gpu_code_objects',
     'inspect_model_artifact',
-    'match_native_functions'
+    'match_native_functions',
+    'diff_binaries'
   ]
 
   const filesToScan = [
+    path.join(ROOT, 'README.md'),
     path.join(ROOT, 'CLAUDE.md'),
     path.join(ROOT, 'AGENTS.md'),
     path.join(ROOT, '.pi', 'SYSTEM.md'),

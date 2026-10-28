@@ -17,7 +17,7 @@ And reorganizes them into a **dual-surface Pi reverse-engineering harness** (int
 1. **Progressive Disclosure First:** Start with `skills/woodchipper/SKILL.md` and load only the domain sub-skill matching the target artifact (`woodchipper-native`, `woodchipper-js-web`, `woodchipper-mobile-managed`, `woodchipper-firmware-signals`, `woodchipper-runtime`, `woodchipper-reconstruction`, `woodchipper-audit`, or `woodchipper-setup`). Read `vendor/rea/docs/` only when you need exact provider edge cases.
 2. **Summary-First Context Protection:** Never dump full JS bundles, symbol tables, or decompilations into context. Always pass `detail: "summary"` first on large targets (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_macho`, `inspect_artifact`, `inspect_managed_artifact`, `inspect_managed_members`, `inspect_wasm_artifact`, `inspect_web_network_capture`, `decode_interface_builder`, `inspect_evm_interface`, `inspect_android_package`, `inspect_pcap_capture`, `inspect_dart_aot`, `get_evidence_bundle`), save `parent_evidence_id`, and page slices via `inspect_analysis_view`.
 3. **Target-Free vs. Active-Session Tools:** Run target-free path-based tools (`analyze_javascript_application`, `inspect_binary_layout`, `inspect_go_binary`, `inspect_rust_binary`, `inspect_pe_resources`, `inspect_sqlite_database`, `inspect_android_package`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_evm_interface`, `inspect_firmware_regions`, `inspect_plist`) directly on disk paths before paying the cost of `open_binary`.
-4. **Three-Bucket Epistemology:** Separate every finding into **Observations** (tool output + `evidence_id` + address/file location), **Inferences** (hypotheses with confidence and competing explanations), and **Unknowns** (tracked via `woodchipper_ledger` or `record_unknown`).
+4. **Three-Bucket Epistemology:** Separate every finding into **Observations** (tool output + `evidence_id` + address/file location), **Inferences** (hypotheses with confidence and competing explanations), and **Unknowns** (tracked via `woodchipper_ledger` or `record_unknown`), persisted per target under git-ignored `workspaces/<slug>/` (`REPORT.md`, `TRIAGE_MAP.md`, `evidence-ledger.json`, `sessions/`).
 5. **Defensive & Clean-Room Scope:** Assist with authorized security testing, defensive vulnerability auditing, interoperability, clean-room behavioral specifications, crash triage, and CTF/educational analysis.
 
 ## Toolchain, Headless Ghidra, & Commands (`mise` + `pnpm`)
@@ -43,8 +43,9 @@ mise run ctl -- status woodchipper
 mise run ctl -- halt woodchipper "Stop active flow"
 mise run ctl -- send woodchipper "Triage /path/to/binary" --wait
 
-# Run REA environment & backend readiness check (Ghidra 12.1.4 + Skill Identity)
+# Run REA environment & backend readiness check (Ghidra 12.1.4 + Skill Identity) and end-to-end smoke check
 mise run doctor       # or: pnpm run doctor
+mise run smoke        # or: ./woodchipper smoke / pnpm run smoke
 
 # Inspect or reclaim disk space (REA/Ghidra caches, Docker build cache, GLiNER models, inactive workspaces)
 ./woodchipper clean status
