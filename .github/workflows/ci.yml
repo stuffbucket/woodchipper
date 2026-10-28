@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  COREPACK_NPM_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+  NPM_CONFIG_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+  PNPM_CONFIG_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+
+jobs:
+  test:
+    name: Validate, test, & mutation gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository and submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.22.1
+          cache: pnpm
+
+      - name: Verify lockfile tarball policy
+        run: node scripts/apply-pnpm-tarball-policy.mjs --check
+
+      - name: Build temporary proxy overrides
+        run: node scripts/build-vendor-overrides.mjs
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --registry="$PNPM_CONFIG_REGISTRY"
+
+      - name: Validate skills, workflows, harness, and supply-chain pins
+        run: node scripts/validate.mjs
+
+      - name: Run unit and integration test suite
+        run: node --experimental-strip-types --test tests/validate-woodchipper.test.mjs tests/pi-extension.test.mjs tests/peer-extension.test.mjs tests/maximal-extension.test.mjs tests/pi-flow.test.mjs
+
+      - name: Run 28-mutant security and logic mutation suite
+        run: node --experimental-strip-types scripts/mutation-test.mjs

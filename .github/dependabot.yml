@@ -1,0 +1,48 @@
+# Dependabot configuration for stuffbucket/woodchipper.
+#
+# - Proposes npm updates only when a release is at least 14 days old so the
+#   configured registry proxy (packagefeedproxy.microsoft.io) has mirrored it;
+#   security updates bypass cooldown automatically.
+# - Groups minor and patch updates so Dependabot opens at most one grouped PR
+#   per ecosystem instead of spamming individual PRs.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
+    groups:
+      dependencies:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope

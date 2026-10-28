@@ -1,0 +1,101 @@
+name: CodeQL
+
+# Fast, scoped CodeQL scanning:
+# - On pull_request / merge_group / push to main: only scans the languages that
+#   changed (`scripts/codeql-languages.mjs`), and skips vendored submodules
+#   (`vendor/`), `tests/`, and `docs/` via `.github/codeql/codeql-config.yml`.
+#   A docs/skill/test-only PR finishes in ~5 seconds without running the analyzer.
+# - On weekly schedule / workflow_dispatch: scans all configured languages.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  schedule:
+    - cron: "37 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scope:
+    name: Pick languages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: List changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          MG_BASE: ${{ github.event.merge_group.base_sha }}
+          MG_HEAD: ${{ github.event.merge_group.head_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          case "$EVENT" in
+            pull_request) range="$PR_BASE...$PR_HEAD" ;;
+            merge_group)  range="$MG_BASE...$MG_HEAD" ;;
+            push)         range="$PUSH_BEFORE...$PUSH_AFTER" ;;
+            *)            range="" ;;
+          esac
+          if [ -z "$range" ] || [ "${range%%...*}" = "0000000000000000000000000000000000000000" ] \
+            || ! gh api "repos/$GITHUB_REPOSITORY/compare/$range" --jq '.files[].filename' > changed.txt \
+            || [ "$(wc -l < changed.txt)" -ge 300 ]; then
+            echo ALL > changed.txt
+          fi
+          echo "$(wc -l < changed.txt) changed path(s)"
+
+      - name: Pick languages
+        id: pick
+        run: echo "languages=$(node scripts/codeql-languages.mjs < changed.txt)" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: scope
+    if: needs.scope.outputs.languages != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.scope.outputs.languages) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: "/language:${{ matrix.language }}"

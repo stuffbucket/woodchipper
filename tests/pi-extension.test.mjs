@@ -18,7 +18,15 @@ import {
 	EvidenceLedger,
 	ensureWorkspacesRootGitignored,
 	listExistingWorkspaces,
+	resolveWoodchipperStateRoot,
 } from "../.pi/extensions/lib/evidence-ledger.ts";
+import {
+	inspectDiskAndResourceUsage,
+	loadWoodchipperConfig,
+	resolveWoodchipperConfigPath,
+	runWoodchipperClean,
+	saveWoodchipperConfig,
+} from "../.pi/extensions/lib/disk-hygiene.ts";
 import {
 	assessExpertiseAndMethodologyFeedback,
 	classifyBinarySignals,
@@ -753,6 +761,49 @@ test("workspaces isolate findings per target and never leak into global XDG or ~
 		assert.equal(initWs.slug, "router-audit");
 		assert.ok(fs.existsSync(initWs.sessionDir));
 		assert.ok(listExistingWorkspaces(tmpRoot).includes("router-audit"));
+
+		// 9. Verify Homebrew Cellar installs route workspaces to ~/woodchipper/workspaces (or ./woodchipper/workspaces when ./woodchipper exists in cwd)
+		const fakeHome = path.join(tmpRoot, "fake-home");
+		const brewCellarRoot = "/opt/homebrew/Cellar/woodchipper/1.0.0/libexec";
+		const emptyCwd = path.join(tmpRoot, "empty-cwd");
+		fs.mkdirSync(emptyCwd, { recursive: true });
+
+		const brewStateRoot = resolveWoodchipperStateRoot(brewCellarRoot, {}, emptyCwd, fakeHome);
+		assert.equal(brewStateRoot, path.join(fakeHome, "woodchipper"));
+
+		const cwdWithWoodchipper = path.join(tmpRoot, "project-with-woodchipper");
+		fs.mkdirSync(path.join(cwdWithWoodchipper, "woodchipper", "workspaces"), { recursive: true });
+		const localCwdStateRoot = resolveWoodchipperStateRoot(brewCellarRoot, {}, cwdWithWoodchipper, fakeHome);
+		assert.equal(localCwdStateRoot, path.join(cwdWithWoodchipper, "woodchipper"));
+
+		const brewModelsDir = defaultGlinerModelsDir({}, brewCellarRoot, emptyCwd, fakeHome);
+		assert.equal(brewModelsDir, path.join(fakeHome, "woodchipper", "models"));
+
+		// 10. Verify cross-platform disk hygiene config, usage inspection, and cache/workspace cleanup
+		const cfgPath = resolveWoodchipperConfigPath({ XDG_CONFIG_HOME: path.join(tmpRoot, "xdg-cfg") }, "linux", fakeHome);
+		assert.equal(cfgPath, path.join(tmpRoot, "xdg-cfg", "woodchipper", "config.json"));
+		const winCfgPath = resolveWoodchipperConfigPath({ APPDATA: "C:\\Users\\test\\AppData\\Roaming" }, "win32", fakeHome);
+		assert.match(winCfgPath, /woodchipper[\\/]config\.json$/);
+
+		const savedCfg = saveWoodchipperConfig({ minFreeDiskGb: 25, autoPullGlinerModel: false }, { XDG_CONFIG_HOME: path.join(tmpRoot, "xdg-cfg") });
+		assert.equal(savedCfg.minFreeDiskGb, 25);
+		assert.equal(loadWoodchipperConfig({ XDG_CONFIG_HOME: path.join(tmpRoot, "xdg-cfg") }).minFreeDiskGb, 25);
+
+		const fakeReaCacheFile = path.join(tmpRoot, "workspaces", ".rea-runtime", "cache", "ghidra.bin");
+		fs.mkdirSync(path.dirname(fakeReaCacheFile), { recursive: true });
+		fs.writeFileSync(fakeReaCacheFile, "x".repeat(4096), "utf8");
+
+		const usageBefore = inspectDiskAndResourceUsage(tmpRoot, { XDG_CONFIG_HOME: path.join(tmpRoot, "xdg-cfg") });
+		assert.ok(usageBefore.reaRuntimeCacheBytes >= 4096);
+		assert.ok(usageBefore.freeDiskBytes > 0);
+
+		const cleanRes = runWoodchipperClean({
+			projectRoot: tmpRoot,
+			scope: "cache",
+			env: { XDG_CONFIG_HOME: path.join(tmpRoot, "xdg-cfg") },
+		});
+		assert.equal(cleanRes.ok, true);
+		assert.equal(fs.existsSync(fakeReaCacheFile), false);
 	} finally {
 		delete process.env.WOODCHIPPER_WORKSPACE;
 		fs.rmSync(tmpRoot, { recursive: true, force: true });

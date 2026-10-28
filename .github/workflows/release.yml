@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+env:
+  COREPACK_NPM_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+  NPM_CONFIG_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+  PNPM_CONFIG_REGISTRY: https://packagefeedproxy.microsoft.io/npm/
+
+jobs:
+  release-please:
+    name: Prepare or create release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      tag-name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  approve:
+    name: Approve release asset build
+    needs: release-please
+    if: needs.release-please.outputs.release-created == 'true'
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - run: echo "Building ${{ needs.release-please.outputs.tag-name }}"
+
+  package-and-publish:
+    name: Package release archive, render Homebrew formula, and publish
+    needs: [release-please, approve]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      TAG_NAME: ${{ needs.release-please.outputs.tag-name }}
+      VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - name: Check out tagged release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag-name }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.22.1
+
+      - name: Build release archive and Homebrew formula
+        run: |
+          set -euo pipefail
+          node scripts/apply-pnpm-tarball-policy.mjs --check
+          node scripts/build-vendor-overrides.mjs
+          pnpm install --frozen-lockfile --registry="$PNPM_CONFIG_REGISTRY"
+          node scripts/build-pi-overlay.mjs
+          node scripts/validate.mjs
+
+          mkdir -p dist/release
+          ARCHIVE="woodchipper-v${VERSION}.tar.gz"
+          tar -czf "dist/release/${ARCHIVE}" \
+            bin .pi .claude .claude-plugin skills playbooks scripts vendor node_modules .woodchipper/pi \
+            woodchipper package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs mise.toml \
+            CLAUDE.md AGENTS.md README.md CHANGELOG.md LICENSE
+
+          (cd dist/release && sha256sum "${ARCHIVE}" > SHA256SUMS)
+          node scripts/render-homebrew-formula.mjs \
+            --version "${VERSION}" \
+            --sums dist/release/SHA256SUMS \
+            --output dist/release/woodchipper.rb
+          (cd dist/release && sha256sum woodchipper.rb >> SHA256SUMS)
+
+      - name: Upload assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG_NAME" dist/release/* --clobber
+          gh release edit "$TAG_NAME" --draft=false --latest
+
+  notify-tap:
+    name: Notify Homebrew tap
+    environment: release
+    needs: [release-please, package-and-publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Send repository_dispatch to stuffbucket/homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag-name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::HOMEBREW_TAP_TOKEN is not configured; stuffbucket/homebrew-tap will pick up $TAG_NAME on its next scheduled sync."
+            exit 0
+          fi
+          gh api repos/stuffbucket/homebrew-tap/dispatches \
+            -f event_type=woodchipper-release \
+            -f "client_payload[tag]=$TAG_NAME" \
+            -f "client_payload[channel]=stable"

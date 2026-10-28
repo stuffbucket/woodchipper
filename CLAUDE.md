@@ -46,10 +46,14 @@ mise run ctl -- send woodchipper "Triage /path/to/binary" --wait
 # Run REA environment & backend readiness check (Ghidra 12.1.4 + Skill Identity)
 mise run doctor       # or: pnpm run doctor
 
+# Inspect or reclaim disk space (REA/Ghidra caches, Docker build cache, GLiNER models, inactive workspaces)
+./woodchipper clean status
+mise run clean        # or: pnpm run clean
+
 # Validate skills, workflows, Pi harness extensions, and vendor manifest
 mise run validate     # or: pnpm run validate
 
-# Run test suite (39 tests) and 28-mutant security/logic mutation suite
+# Run test suite (40 tests) and 28-mutant security/logic mutation suite
 mise run test         # or: pnpm test
 mise run test:mutate  # or: pnpm run test:mutate
 

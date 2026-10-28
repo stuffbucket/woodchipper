@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveWoodchipperStateRoot } from "./evidence-ledger.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, "../../..");
@@ -111,8 +112,9 @@ export function resolveReaProviderEnv(
 	// Suppress Pi's upstream npm version/update check so the TUI never nags about Pi updates
 	env.PI_SKIP_VERSION_CHECK = "1";
 	if (projectRoot) {
-		const runtimeDir = path.join(projectRoot, "workspaces", ".rea-runtime");
-		const piAgentDir = path.join(projectRoot, "workspaces", ".pi-agent");
+		const stateRoot = resolveWoodchipperStateRoot(projectRoot, baseEnv);
+		const runtimeDir = path.join(stateRoot, "workspaces", ".rea-runtime");
+		const piAgentDir = path.join(stateRoot, "workspaces", ".pi-agent");
 		try {
 			fs.mkdirSync(path.join(runtimeDir, "cache"), { recursive: true });
 			fs.mkdirSync(path.join(runtimeDir, "data"), { recursive: true });

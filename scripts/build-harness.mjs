@@ -38,6 +38,7 @@ const REQUIRED_PATHS = [
 	".pi/extensions/lib/maximal-provider.ts",
 	".pi/extensions/lib/gliner-classifier.ts",
 	".pi/extensions/lib/evidence-ledger.ts",
+	".pi/extensions/lib/disk-hygiene.ts",
 	".pi/extensions/lib/triage.ts",
 	".pi/extensions/lib/peer-protocol.ts",
 	".pi/extensions/lib/schema.ts",

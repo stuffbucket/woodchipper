@@ -1,6 +1,8 @@
 packages:
   - site
 
+pnpmfile: .pnpmfile.cjs
+
 overrides:
   # jose v6.2.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935
   jose: link:vendor/overrides/packages/jose

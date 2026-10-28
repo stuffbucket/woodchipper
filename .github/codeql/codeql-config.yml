@@ -1,0 +1,17 @@
+# CodeQL configuration, wired in by .github/workflows/codeql.yml.
+#
+# scripts/codeql-languages.mjs reads `paths-ignore` below so that a PR touching
+# only ignored paths (tests, docs, vendored submodules) skips the heavy CodeQL
+# analysis job completely.
+
+name: "woodchipper CodeQL config"
+
+queries:
+  - uses: security-extended
+
+paths-ignore:
+  - tests
+  - docs
+  - vendor
+  - "**/vendor"
+  - "**/*.min.js"

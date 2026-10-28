@@ -221,6 +221,7 @@ const requiredHarnessFiles = [
   '.pi/extensions/lib/maximal-provider.ts',
   '.pi/extensions/lib/gliner-classifier.ts',
   '.pi/extensions/lib/evidence-ledger.ts',
+  '.pi/extensions/lib/disk-hygiene.ts',
   '.pi/extensions/lib/triage.ts',
   '.pi/extensions/lib/peer-protocol.ts',
   '.pi/extensions/lib/schema.ts',
@@ -243,7 +244,16 @@ const requiredHarnessFiles = [
   'site/src/pages/index.astro',
   'site/src/content/docs/start.md',
   'site/src/content/docs/examples/index.md',
-  '.github/workflows/site.yml'
+  '.github/workflows/site.yml',
+  '.github/workflows/ci.yml',
+  '.github/workflows/codeql.yml',
+  '.github/codeql/codeql-config.yml',
+  '.github/dependabot.yml',
+  '.pnpmfile.cjs',
+  'scripts/apply-pnpm-tarball-policy.mjs',
+  'scripts/codeql-languages.mjs',
+  'scripts/render-homebrew-formula.mjs',
+  'packaging/homebrew/woodchipper.rb'
 ]
 for (const rel of requiredHarnessFiles) {
   const p = path.join(ROOT, rel)
@@ -313,7 +323,7 @@ if (!fs.existsSync(toolContractsPath)) {
   }
 }
 
-// 8. Validate the public documentation site and Pages deployment
+// 8. Validate the public documentation site, Pages deployment, and supply-chain / CI workflows
 const sitePackage = JSON.parse(fs.readFileSync(path.join(ROOT, 'site', 'package.json'), 'utf8'))
 const siteConfig = fs.readFileSync(path.join(ROOT, 'site', 'astro.config.mjs'), 'utf8')
 const siteWorkflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'site.yml'), 'utf8')
@@ -327,6 +337,29 @@ if (
   fail('Documentation site must keep exact Astro/Starlight pins, the Pages base path, and the Pages deployment workflow')
 } else {
   ok('Documentation site is version-pinned and configured for GitHub Pages')
+}
+
+// 9. Validate pnpm tarball policy, GitHub Actions SHA + semver comments, Dependabot, CodeQL, and Homebrew formula template
+try {
+  execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'apply-pnpm-tarball-policy.mjs'), '--check'], {
+    cwd: ROOT,
+    stdio: 'pipe'
+  })
+  ok('Supply chain: pnpm-lock.yaml passes tarball URL policy (no rotating shard hosts)')
+} catch (err) {
+  fail(`pnpm-lock.yaml failed tarball URL policy check: ${err.message}`)
+}
+
+const ghWorkflowsDir = path.join(ROOT, '.github', 'workflows')
+for (const wfFile of fs.readdirSync(ghWorkflowsDir).filter((f) => f.endsWith('.yml'))) {
+  const wfText = fs.readFileSync(path.join(ghWorkflowsDir, wfFile), 'utf8')
+  const usesLines = wfText.split(/\r?\n/).filter((l) => /^\s*-?\s*uses:\s*/.test(l))
+  for (const line of usesLines) {
+    if (!/@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+/.test(line)) {
+      fail(`.github/workflows/${wfFile} action is not SHA-pinned with a '# vX.Y.Z' semver comment: ${line.trim()}`)
+    }
+  }
+  ok(`GitHub workflow ${wfFile} (${usesLines.length} SHA-pinned actions with semver comments)`)
 }
 
 if (errors > 0) {
