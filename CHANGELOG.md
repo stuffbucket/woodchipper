@@ -2,6 +2,15 @@
 
 All notable changes to `@stuffbucket/woodchipper` are documented in this file.
 
+## [1.0.1](https://github.com/stuffbucket/woodchipper/compare/v1.0.0...v1.0.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **ci:** configure release-please tag format and drop raw submodule dependabot ([d81cd82](https://github.com/stuffbucket/woodchipper/commit/d81cd82b44693ce1c8d5d6ec7461e60645e13410))
+* **ci:** configure release-please tag format and drop raw submodule dependabot ([f4f05ba](https://github.com/stuffbucket/woodchipper/commit/f4f05ba77014ac896ac88fc42027dbbc3203f9c0))
+* **ci:** package compact release archive in release workflow ([5f452f9](https://github.com/stuffbucket/woodchipper/commit/5f452f9d717706cea6efbee5626ab0947c8d3ce4))
+
 ## [1.0.0](https://github.com/stuffbucket/woodchipper/releases/tag/v1.0.0) (2026-10-28)
 
 ### Features
