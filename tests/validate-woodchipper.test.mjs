@@ -84,7 +84,7 @@ test('temporary proxy-gap packages stay isolated as Docker-built submodule overr
   const workspaceConfig = fs.readFileSync(path.join(ROOT, 'pnpm-workspace.yaml'), 'utf8')
   assert.match(
     workspaceConfig,
-    /^packages:\n  - site\n\noverrides:\n  # jose v6\.2\.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935\n  jose: link:vendor\/overrides\/packages\/jose\n  # fast-uri v3\.1\.9 source SHA 0def70338a0fa2f12a10c83ae8eafc2139ae9a07\n  fast-uri: link:vendor\/overrides\/packages\/fast-uri\n  # GHSA-mrhx-c7xc-m3w5 is fixed in zod >=4\.6\.6; 4\.6\.7 is mirrored by the proxy\.\n  zod: 4\.6\.7\n\nallowBuilds:\n  frida: true\n$/
+    /^packages:\n  - site\n\npnpmfile: \.pnpmfile\.cjs\n\noverrides:\n  # jose v6\.2\.13 source SHA 316b7f2cb41b8377515d9cc2e81e03f8e50ee935\n  jose: link:vendor\/overrides\/packages\/jose\n  # fast-uri v3\.1\.9 source SHA 0def70338a0fa2f12a10c83ae8eafc2139ae9a07\n  fast-uri: link:vendor\/overrides\/packages\/fast-uri\n  # GHSA-mrhx-c7xc-m3w5 is fixed in zod >=4\.6\.6; 4\.6\.7 is mirrored by the proxy\.\n  zod: 4\.6\.7\n\nallowBuilds:\n  frida: true\n$/
   )
   assert.ok(
     packageJson.scripts.setup.indexOf('node scripts/build-vendor-overrides.mjs') <
@@ -247,3 +247,26 @@ test('documentation site has pinned dependencies, examples, and a Pages workflow
   assert.match(workflow, /actions\/configure-pages@[0-9a-f]{40}/)
   assert.match(workflow, /actions\/deploy-pages@[0-9a-f]{40}/)
 })
+
+test('supply chain, CodeQL language picker, Dependabot, and Homebrew formula renderer are configured', async () => {
+  const { languagesFor, readPathsIgnore } = await import(path.join(ROOT, 'scripts', 'codeql-languages.mjs'))
+  const { parseSums, renderFormula } = await import(path.join(ROOT, 'scripts', 'render-homebrew-formula.mjs'))
+
+  const codeqlYaml = fs.readFileSync(path.join(ROOT, '.github', 'codeql', 'codeql-config.yml'), 'utf8')
+  const ignore = readPathsIgnore(codeqlYaml)
+  assert.deepEqual(languagesFor(['docs/README.md', 'tests/pi-flow.test.mjs', 'vendor/pi/index.ts'], ignore), [])
+  assert.deepEqual(languagesFor(['.github/workflows/ci.yml'], ignore), ['actions'])
+  assert.deepEqual(languagesFor(['.pi/extensions/pi-flow.ts'], ignore), ['javascript-typescript'])
+
+  const template = fs.readFileSync(path.join(ROOT, 'packaging', 'homebrew', 'woodchipper.rb'), 'utf8')
+  const sums = parseSums(`${'a'.repeat(64)}  woodchipper-v1.0.0.tar.gz\n`)
+  const rendered = renderFormula({ template, version: '1.0.0', digests: sums })
+  assert.match(rendered, /url "https:\/\/github\.com\/stuffbucket\/woodchipper\/releases\/download\/v1\.0\.0\/woodchipper-v1\.0\.0\.tar\.gz"/)
+  assert.match(rendered, new RegExp(`sha256 "${'a'.repeat(64)}"`))
+
+  const dependabot = fs.readFileSync(path.join(ROOT, '.github', 'dependabot.yml'), 'utf8')
+  assert.match(dependabot, /package-ecosystem: github-actions/)
+  assert.match(dependabot, /package-ecosystem: npm/)
+  assert.match(dependabot, /default-days: 14/)
+})
+

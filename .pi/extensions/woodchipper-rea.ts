@@ -10,6 +10,13 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
+	type CleanScope,
+	formatDiskHygieneMarkdown,
+	inspectDiskAndResourceUsage,
+	runWoodchipperClean,
+	saveWoodchipperConfig,
+} from "./lib/disk-hygiene.ts";
+import {
 	type ConfidenceLevel,
 	EvidenceLedger,
 	ensureWorkspacesRootGitignored,
@@ -127,6 +134,7 @@ export const NON_REA_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
 	"woodchipper_triage",
 	"woodchipper_playbook",
 	"woodchipper_classify",
+	"woodchipper_clean",
 	"claude_peers",
 	"flow_goal",
 	"flow_branch",
@@ -1105,6 +1113,7 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			const glinerInstalled = isModelPresentOnDisk(modelsDir);
 			const contextUsage = ctx?.getContextUsage?.();
 
+			const diskReport = inspectDiskAndResourceUsage(projectRoot);
 			const statusInput = {
 				projectRoot,
 				cwd: ctx?.cwd || projectRoot,
@@ -1143,6 +1152,10 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 				glinerInstalled,
 				glinerRunnerAvailable: glinerRunner.available,
 				glinerModelsDir: modelsDir,
+				freeDiskHuman: diskReport.freeDiskHuman,
+				totalManagedHuman: diskReport.totalManagedHuman,
+				lowDiskWarning: diskReport.lowDiskWarning,
+				configPath: diskReport.configPath,
 			};
 
 			const content =
@@ -1257,6 +1270,97 @@ export default function woodchipperReaExtension(pi: ExtensionAPI) {
 			"Clear both the conversation session and the current workspace's Evidence Ledger: /reset [new-workspace]",
 		handler: async (args, ctx) => {
 			await handleClearOrReset(args, ctx, !args.trim());
+		},
+	});
+
+	pi.registerCommand("clean", {
+		description:
+			"Inspect disk usage or clean REA/Ghidra caches, temp dirs, Docker build cache, GLiNER models, or inactive workspaces: /clean [status|cache|docker|models|workspaces|all|config minFreeDiskGb=20]",
+		handler: async (args, ctx) => {
+			const trimmed = args.trim();
+			if (trimmed.toLowerCase().startsWith("config ")) {
+				const kv = trimmed.slice("config ".length).trim();
+				const eqIdx = kv.indexOf("=");
+				if (eqIdx > 0) {
+					const k = kv.slice(0, eqIdx).trim();
+					const v = kv.slice(eqIdx + 1).trim();
+					const updates: Record<string, unknown> = {};
+					if (k === "minFreeDiskGb" || k === "maxWorkspacesTotalMb") {
+						const num = Number.parseFloat(v);
+						if (Number.isFinite(num) && num > 0) updates[k] = num;
+					} else if (k === "autoPullGlinerModel" || k === "confirmHeavyOperations") {
+						updates[k] = v === "true" || v === "1";
+					}
+					const nextCfg = saveWoodchipperConfig(updates);
+					const report = inspectDiskAndResourceUsage(projectRoot);
+					pi.sendMessage(
+						{
+							customType: "woodchipper-clean",
+							content: `Updated \`${report.configPath}\`:\n\`\`\`json\n${JSON.stringify(nextCfg, null, 2)}\n\`\`\`\n\n${formatDiskHygieneMarkdown(report)}`,
+							display: true,
+							details: report,
+						},
+						{ triggerTurn: false },
+					);
+					return;
+				}
+			}
+
+			const validScopes = new Set<CleanScope>(["status", "cache", "docker", "models", "workspaces", "all"]);
+			const rawScope = (trimmed.split(/\s+/)[0]?.toLowerCase() || "status") as CleanScope;
+			const scope: CleanScope = validScopes.has(rawScope) ? rawScope : "status";
+
+			if (scope === "status") {
+				const report = inspectDiskAndResourceUsage(projectRoot);
+				pi.sendMessage(
+					{
+						customType: "woodchipper-clean",
+						content: formatDiskHygieneMarkdown(report),
+						display: true,
+						details: report,
+					},
+					{ triggerTurn: false },
+				);
+				return;
+			}
+
+			if (
+				(scope === "models" || scope === "workspaces" || scope === "all") &&
+				ctx?.hasUI &&
+				typeof ctx.ui?.confirm === "function" &&
+				!trimmed.includes("--yes")
+			) {
+				const ok = await ctx.ui.confirm(
+					`Confirm Woodchipper Cleanup (${scope})`,
+					`Clean ${scope} (inactive workspaces, model cache, or Docker build cache)? Active workspace '${ledger.getWorkspaceSlug()}' is preserved.`,
+				);
+				if (!ok) {
+					ctx.ui.notify("Cleanup cancelled.", "info");
+					return;
+				}
+			}
+
+			const cleanRes = runWoodchipperClean({
+				projectRoot,
+				scope,
+				activeWorkspaceSlug: ledger.getWorkspaceSlug(),
+			});
+			const md = formatDiskHygieneMarkdown(cleanRes.reportAfter, cleanRes);
+			pi.sendMessage(
+				{
+					customType: "woodchipper-clean",
+					content: md,
+					display: true,
+					details: cleanRes,
+				},
+				{ triggerTurn: false },
+			);
+			if (ctx?.hasUI) {
+				ctx.ui.notify(
+					`Cleanup (${scope}): reclaimed ${cleanRes.reclaimedHuman} • free disk: ${cleanRes.reportAfter.freeDiskHuman}`,
+					"info",
+				);
+			}
 		},
 	});
 

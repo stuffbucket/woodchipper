@@ -22,6 +22,11 @@ import {
 	ensureWorkspacesRootGitignored,
 	listExistingWorkspaces,
 } from "../.pi/extensions/lib/evidence-ledger.ts";
+import {
+	formatDiskHygieneMarkdown,
+	inspectDiskAndResourceUsage,
+	runWoodchipperClean,
+} from "../.pi/extensions/lib/disk-hygiene.ts";
 import { resolveReaProviderEnv } from "../.pi/extensions/lib/triage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -312,9 +317,33 @@ Usage:
   woodchipper daemon [-w <workspace>] [pi-args...] Run headless A2A / Claude Code peer daemon
   woodchipper rpc [pi-args...]                     Run Pi JSONL RPC mode (--mode rpc)
   woodchipper ask <prompt...>                      Run one-shot headless prompt (-p)
+  woodchipper clean [status|cache|docker|models|workspaces|all]  Inspect or reclaim disk space
   woodchipper smoke                                Run end-to-end smoke verification on sample Electron app
   woodchipper build-pi                             Build audited Pi runtime from pinned vendor/pi source
 `);
+		return;
+	}
+
+	if (sub === "clean") {
+		const rawScope = argv[1] && !argv[1].startsWith("-") ? argv[1].toLowerCase() : "cache";
+		if (rawScope === "status") {
+			const report = inspectDiskAndResourceUsage(PROJECT_ROOT);
+			if (argv.includes("--json")) {
+				console.log(JSON.stringify(report, null, 2));
+			} else {
+				console.log(formatDiskHygieneMarkdown(report));
+			}
+			return;
+		}
+		const cleanRes = runWoodchipperClean({
+			projectRoot: PROJECT_ROOT,
+			scope: ["cache", "docker", "models", "workspaces", "all"].includes(rawScope) ? rawScope : "cache",
+		});
+		if (argv.includes("--json")) {
+			console.log(JSON.stringify(cleanRes, null, 2));
+		} else {
+			console.log(formatDiskHygieneMarkdown(cleanRes.reportAfter, cleanRes));
+		}
 		return;
 	}
 

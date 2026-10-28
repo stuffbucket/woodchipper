@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 export interface TrackedEvidenceId {
@@ -85,11 +86,71 @@ export function deriveWorkspaceSlug(targetPathOrName?: string): string {
 }
 
 /**
+ * Detect whether `dirPath` is inside a Homebrew Cellar / opt prefix (or explicitly marked via `WOODCHIPPER_BREW_INSTALL=1`).
+ */
+export function isBrewOrReadOnlyInstallPath(
+	dirPath: string,
+	env: NodeJS.ProcessEnv = process.env,
+): boolean {
+	if (env.WOODCHIPPER_BREW_INSTALL === "1") return true;
+	return /(?:^|[\\/])(?:Cellar|homebrew|linuxbrew)(?:[\\/]|$)/i.test(String(dirPath || ""));
+}
+
+/**
+ * Check whether `<cwd>/woodchipper` exists and is a Woodchipper state directory
+ * (contains `workspaces/`, `ACTIVE_WORKSPACE`, `models/`, or is an empty directory created for Woodchipper).
+ */
+export function hasLocalWoodchipperDir(cwd: string): boolean {
+	const candidate = path.join(cwd, "woodchipper");
+	try {
+		if (!fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
+			return false;
+		}
+		const entries = fs.readdirSync(candidate);
+		if (entries.length === 0) return true;
+		return (
+			fs.existsSync(path.join(candidate, "workspaces")) ||
+			fs.existsSync(path.join(candidate, "ACTIVE_WORKSPACE")) ||
+			fs.existsSync(path.join(candidate, "models"))
+		);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Resolve the writable root directory that holds `workspaces/` (and `.woodchipper/` state):
+ * 1. Explicit `WOODCHIPPER_STATE_ROOT` override if set.
+ * 2. When installed via Homebrew (`isBrewOrReadOnlyInstallPath(projectRoot)`):
+ *    - Uses `<cwd>/woodchipper` (`./woodchipper/workspaces/`) if `./woodchipper` exists in `cwd` and is related to Woodchipper work.
+ *    - Otherwise defaults to `~/woodchipper` (`~/woodchipper/workspaces/`).
+ * 3. Otherwise uses `projectRoot` (`./workspaces/` in the git checkout).
+ */
+export function resolveWoodchipperStateRoot(
+	projectRoot: string,
+	env: NodeJS.ProcessEnv = process.env,
+	cwd: string = process.cwd(),
+	homeDir: string = os.homedir(),
+): string {
+	if (env.WOODCHIPPER_STATE_ROOT?.trim()) {
+		return path.resolve(env.WOODCHIPPER_STATE_ROOT.trim());
+	}
+	if (isBrewOrReadOnlyInstallPath(projectRoot, env)) {
+		if (!isBrewOrReadOnlyInstallPath(cwd, env) && hasLocalWoodchipperDir(cwd)) {
+			return path.resolve(cwd, "woodchipper");
+		}
+		return path.join(homeDir, "woodchipper");
+	}
+	return projectRoot;
+}
+
+/**
  * Ensure `workspaces/` exists and contains a local `.gitignore` (`*`) so reverse-engineering
  * artifacts and reports inside `workspaces/` can never be accidentally staged or committed.
  */
 export function ensureWorkspacesRootGitignored(projectRoot: string): string {
-	const workspacesRoot = path.join(projectRoot, "workspaces");
+	const stateRoot = resolveWoodchipperStateRoot(projectRoot);
+	const workspacesRoot = path.join(stateRoot, "workspaces");
 	try {
 		fs.mkdirSync(workspacesRoot, { recursive: true });
 		const gitignorePath = path.join(workspacesRoot, ".gitignore");
@@ -107,10 +168,11 @@ export function ensureWorkspacesRootGitignored(projectRoot: string): string {
 }
 
 /**
- * List existing workspace slugs in `<projectRoot>/workspaces/`, most recently modified first.
+ * List existing workspace slugs in `<stateRoot>/workspaces/`, most recently modified first.
  */
 export function listExistingWorkspaces(projectRoot: string): string[] {
-	const workspacesRoot = path.join(projectRoot, "workspaces");
+	const stateRoot = resolveWoodchipperStateRoot(projectRoot);
+	const workspacesRoot = path.join(stateRoot, "workspaces");
 	if (!fs.existsSync(workspacesRoot)) return [];
 	try {
 		return fs
@@ -172,11 +234,11 @@ export class EvidenceLedger {
 	private data: EvidenceLedgerData;
 
 	constructor(projectRoot: string, initialTargetOrWorkspace?: string) {
-		this.projectRoot = projectRoot;
+		this.projectRoot = resolveWoodchipperStateRoot(projectRoot);
 		const envWorkspace = process.env.WOODCHIPPER_WORKSPACE?.trim();
 		const initial = initialTargetOrWorkspace ?? envWorkspace ?? "default";
 		this.workspaceSlug = initial === "default" ? "default" : deriveWorkspaceSlug(initial);
-		this.targetPath = initial !== "default" ? path.resolve(projectRoot, initial) : undefined;
+		this.targetPath = initial !== "default" ? path.resolve(this.projectRoot, initial) : undefined;
 		this.workspaceDir = path.join(this.projectRoot, "workspaces", this.workspaceSlug);
 		this.ledgerPath = path.join(this.workspaceDir, "evidence-ledger.json");
 		this.reportPath = path.join(this.workspaceDir, "REPORT.md");

@@ -45,6 +45,17 @@
   "dependencies": {
     "rea-agents": "6.7.0"
   },
+  "pnpmTarballUrlPolicy": {
+    "rules": [
+      {
+        "registry": "https://packagefeedproxy.microsoft.io/npm/",
+        "includeTarballHostSuffixes": [
+          "pkgs.visualstudio.com"
+        ],
+        "action": "omit"
+      }
+    ]
+  },
   "scripts": {
     "start": "node --experimental-strip-types bin/woodchipper.mjs",
     "setup": "git submodule update --init --recursive && node scripts/build-vendor-overrides.mjs && pnpm install --frozen-lockfile && pnpm run build:harness -- --with-submodule-build",
@@ -54,6 +65,7 @@
     "site:build": "pnpm --filter @stuffbucket/woodchipper-site build",
     "site:preview": "pnpm --filter @stuffbucket/woodchipper-site preview",
     "woodchipper": "node --experimental-strip-types bin/woodchipper.mjs",
+    "clean": "node --experimental-strip-types bin/woodchipper.mjs clean",
     "daemon": "node --experimental-strip-types bin/woodchipper.mjs daemon",
     "ctl": "node --experimental-strip-types scripts/woodchipper-ctl.mjs",
     "build:harness": "node --experimental-strip-types scripts/build-harness.mjs",

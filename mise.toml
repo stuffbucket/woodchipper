@@ -12,6 +12,9 @@ java = "temurin-21.0.12+101.0.LTS"
 GHIDRA_INSTALL_DIR = "{{env.HOME}}/.local/share/ghidra/ghidra_12.1.4_PUBLIC"
 JAVA_HOME = "{{env.HOME}}/.local/share/mise/installs/java/temurin-21.0.12+101.0.LTS"
 GHIDRA_HEADLESS_MAXMEM = "4G"
+COREPACK_NPM_REGISTRY = "https://packagefeedproxy.microsoft.io/npm/"
+NPM_CONFIG_REGISTRY = "https://packagefeedproxy.microsoft.io/npm/"
+PNPM_CONFIG_REGISTRY = "https://packagefeedproxy.microsoft.io/npm/"
 
 [settings]
 lockfile = true
@@ -55,6 +58,10 @@ run = "pnpm run daemon"
 [tasks.ctl]
 description = "Control or message Woodchipper / Claude Code peers: mise run ctl -- [peers|status|ledger|send]"
 run = "pnpm run ctl --"
+
+[tasks.clean]
+description = "Inspect or clean REA/Ghidra caches, temp dirs, Docker build cache, GLiNER models, or inactive workspaces"
+run = "pnpm run clean"
 
 [tasks.validate]
 description = "Validate Woodchipper skills, workflows, Pi harness extensions, and vendor manifest"

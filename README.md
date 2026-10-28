@@ -114,7 +114,11 @@ mise run ctl -- halt woodchipper "Stop active monitor"
 mise run ctl -- ledger woodchipper
 mise run ctl -- send woodchipper "Triage /bin/ls" --wait
 
-# 6. Run validation, unit/integration tests (39 tests), and the 28-mutant security/logic mutation suite
+# 6. Inspect or reclaim disk space (REA/Ghidra caches, Docker build cache, GLiNER models, inactive workspaces)
+./woodchipper clean status
+./woodchipper clean cache       # or: mise run clean / /clean in the TUI
+
+# 7. Run validation, unit/integration tests (40 tests), and the 28-mutant security/logic mutation suite
 mise run validate       # or: pnpm run validate
 mise run test           # or: pnpm test
 mise run test:mutate    # or: pnpm run test:mutate

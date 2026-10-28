@@ -12,8 +12,9 @@ description: Woodchipper setup, operation, validation, and TUI commands.
 | `mise run smoke` (or `./woodchipper smoke`) | Run end-to-end smoke verification against `tests/fixtures/sample-electron-app` |
 | `mise run doctor` | Check REA `6.7.0`, Ghidra `12.1.4`, Java `21`, and skill readiness |
 | `mise run validate` | Validate skills, workflows, harness files, REA `6.7.0` contracts, configuration boundaries, and source pins |
-| `mise run test` | Run the 39-test Node validation suite |
+| `mise run test` | Run the 40-test Node validation suite |
 | `mise run test:mutate` | Run the 28-mutant security and logic mutation suite |
+| `mise run clean` (or `./woodchipper clean [scope]`) | Inspect disk usage or reclaim REA/Ghidra caches (`cache`), Docker build cache (`docker`), GLiNER models (`models`), or inactive workspaces (`workspaces`, `all`) |
 
 ## Run Woodchipper
 
@@ -44,6 +45,7 @@ description: Woodchipper setup, operation, validation, and TUI commands.
 | `/maximal [status\|models\|refresh\|use <id>]` | Inspect, refresh, or switch models on the local `maximal` (`localhost:4141`) provider |
 | `/gliner [status\|ensure-model\|classify <text>]` | Check, auto-pull (`decide-340m`), or run the GLiNER zero-shot intent/capability classifier |
 | `/doctor` | Show REA `6.7.0` and external backend readiness |
+| `/clean [status\|cache\|docker\|models\|workspaces\|all\|config k=v]` | Inspect disk usage, reclaim REA/Ghidra/Docker/model caches, or update thresholds in `~/.config/woodchipper/config.json` (`%APPDATA%\woodchipper\config.json` on Windows) |
 | `/clear [all\|<workspace>]` | Start a fresh conversation session (`/clear`), wipe both session and ledger (`/clear all` or `/reset`), or start fresh in a new workspace |
 | `/exit` (or `/quit`) | Gracefully exit the Woodchipper TUI |
 

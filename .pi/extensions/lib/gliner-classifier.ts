@@ -23,6 +23,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isBrewOrReadOnlyInstallPath, resolveWoodchipperStateRoot } from "./evidence-ledger.ts";
 import type { PlaybookId, WoodchipperSubSkill } from "./triage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -137,9 +138,14 @@ export interface SignalClassificationResult {
 export function defaultGlinerModelsDir(
 	env: NodeJS.ProcessEnv = process.env,
 	projectRoot = DEFAULT_PROJECT_ROOT,
+	cwd: string = process.cwd(),
+	homeDir: string = os.homedir(),
 ): string {
 	if (env.GLINER_RUNNER_MODELS_DIR?.trim()) {
 		return env.GLINER_RUNNER_MODELS_DIR.trim();
+	}
+	if (isBrewOrReadOnlyInstallPath(projectRoot, env)) {
+		return path.join(resolveWoodchipperStateRoot(projectRoot, env, cwd, homeDir), "models");
 	}
 	return path.join(projectRoot, "vendor", "gliner-runner", "models");
 }
@@ -1085,7 +1091,7 @@ export function renderWoodchipperHeaderLines(
 		`${emblemRows[3]} ${muted("Output ")} ${rgbFg(110, 242, 184, reportRel)} ${dim("(isolated per target)")}`,
 		divider,
 		`  ${bright("Drop any file path or ask in plain English:")}  ${dim('"What is /path/to/app?"')}`,
-		`  ${cmdPill("/start <path>")} ${dim("•")} ${cmdPill("/status")} ${dim("•")} ${cmdPill("/workspace")} ${dim("•")} ${cmdPill("/triage")} ${dim("•")} ${cmdPill("/trace")} ${dim("•")} ${cmdPill("/audit")} ${dim("•")} ${cmdPill("/clear")} ${dim("•")} ${cmdPill("/exit")}`,
+		`  ${cmdPill("/start <path>")} ${dim("•")} ${cmdPill("/status")} ${dim("•")} ${cmdPill("/workspace")} ${dim("•")} ${cmdPill("/triage")} ${dim("•")} ${cmdPill("/trace")} ${dim("•")} ${cmdPill("/audit")} ${dim("•")} ${cmdPill("/clean")} ${dim("•")} ${cmdPill("/clear")} ${dim("•")} ${cmdPill("/exit")}`,
 	];
 
 	return lines.map((l) => truncateVisible(l, safeWidth));
@@ -1135,6 +1141,10 @@ export interface WoodchipperStatusInput {
 	glinerInstalled: boolean;
 	glinerRunnerAvailable: boolean;
 	glinerModelsDir: string;
+	freeDiskHuman?: string;
+	totalManagedHuman?: string;
+	lowDiskWarning?: boolean;
+	configPath?: string;
 }
 
 /**
@@ -1190,12 +1200,20 @@ export function renderWoodchipperStatusCardLines(
 	const topBar = `  ${rgbPill(255, 30, 86, 255, 255, 255, "WOODCHIPPER STATUS")} ${rgbPill(32, 40, 58, 190, 205, 230, info.mode.toUpperCase())} ${dim(`PID ${info.pid}`)}`;
 	const divider = `  ${gradientText("─".repeat(ruleWidth), [[255, 30, 86], [148, 82, 235], [0, 210, 255]])}`;
 
+	const diskBadge = info.lowDiskWarning
+		? ` ${rgbPill(130, 28, 38, 255, 195, 195, "LOW DISK — RUN /clean")}`
+		: "";
+	const diskRow = info.freeDiskHuman
+		? `${padLabel("Disk & Cache")}${bright(`${info.freeDiskHuman} free`)} ${dim("•")} ${muted(`managed: ${info.totalManagedHuman ?? "0 B"}`)}${diskBadge}`
+		: undefined;
+
 	const rows: string[] = [
 		topBar,
 		divider,
 		sectionTitle("SESSION & RUNTIME"),
 		`${padLabel("Working Dir")}${bright(info.cwd)}`,
 		`${padLabel("Output Dir")}${rgbFg(110, 242, 184, `workspaces/${info.workspaceSlug}/`)}  ${dim("(REPORT.md • TRIAGE_MAP.md)")}`,
+		...(diskRow ? [diskRow] : []),
 		`${padLabel("Peer Socket")}${muted(`/tmp/cc-socks/${info.pid}.sock`)}`,
 		"",
 		sectionTitle("ACTIVE MODEL & PROVIDER"),
