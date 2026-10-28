@@ -158,8 +158,25 @@ function applyManifestOverlay(config, outputRoot) {
 	fs.rmSync(path.join(outputRoot, "package-lock.json"), { force: true });
 }
 
-function verifyLock(config, outputRoot) {
-	const lock = readJson(path.join(outputRoot, "package-lock.json"));
+export function normalizeTarballUrl(resolvedUrl, registry) {
+	if (typeof resolvedUrl !== "string" || !resolvedUrl.startsWith("http")) {
+		return resolvedUrl;
+	}
+	const base = registry.replace(/\/?$/, "/");
+	const azureMatch = resolvedUrl.match(/^https?:\/\/[^/]+\/(?:[^/]+\/)*_packaging\/[^/]+\/npm\/registry\/(.+)$/);
+	if (azureMatch) {
+		return `${base}${azureMatch[1]}`;
+	}
+	const npmjsMatch = resolvedUrl.match(/^https?:\/\/registry\.npmjs\.org\/(.+)$/);
+	if (npmjsMatch) {
+		return `${base}${npmjsMatch[1]}`;
+	}
+	return resolvedUrl;
+}
+
+function verifyLock(config, outputRoot, registry) {
+	const lockPath = path.join(outputRoot, "package-lock.json");
+	const lock = readJson(lockPath);
 	for (const [packagePath, expectedVersion] of Object.entries(config.expected_lock_versions)) {
 		const actualVersion = lock.packages?.[packagePath]?.version;
 		if (actualVersion !== expectedVersion) {
@@ -170,6 +187,20 @@ function verifyLock(config, outputRoot) {
 	const fastUri = lock.packages?.["node_modules/fast-uri"];
 	if (!fastUri?.link || !fastUri.resolved?.endsWith("vendor/overrides/packages/fast-uri")) {
 		throw new Error("Pi overlay lock does not link the Docker-built fast-uri@3.1.9 package");
+	}
+
+	let rewritten = 0;
+	for (const pkg of Object.values(lock.packages ?? {})) {
+		if (pkg && typeof pkg.resolved === "string") {
+			const normalized = normalizeTarballUrl(pkg.resolved, registry);
+			if (normalized !== pkg.resolved) {
+				pkg.resolved = normalized;
+				rewritten++;
+			}
+		}
+	}
+	if (rewritten > 0) {
+		writeJson(lockPath, lock);
 	}
 }
 
@@ -224,7 +255,6 @@ export function buildPiOverlay() {
 	const npmEnvironment = {
 		...process.env,
 		npm_config_registry: registry,
-		npm_config_replace_registry_host: "always",
 		npm_config_audit: "false",
 		npm_config_fund: "false",
 		npm_config_update_notifier: "false",
@@ -235,7 +265,7 @@ export function buildPiOverlay() {
 		["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund", `--registry=${registry}`],
 		npmOptions,
 	);
-	verifyLock(config, outputRoot);
+	verifyLock(config, outputRoot, registry);
 	run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund", `--registry=${registry}`], npmOptions);
 	run("npm", ["run", "build:offline"], npmOptions);
 	audit(config, outputRoot, npmEnvironment);
