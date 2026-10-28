@@ -5,6 +5,9 @@
 #   security updates bypass cooldown automatically.
 # - Groups minor and patch updates so Dependabot opens at most one grouped PR
 #   per ecosystem instead of spamming individual PRs.
+# - Git submodules (vendor/pi, vendor/gliner-runner, vendor/overrides/*) are
+#   coupled to vendor/MANIFEST.json and vendor/overrides/pi-audit.json and are
+#   updated via `mise run update:vendor`.
 
 version: 2
 updates:
@@ -34,15 +37,6 @@ updates:
         update-types:
           - minor
           - patch
-    commit-message:
-      prefix: build
-      include: scope
-
-  - package-ecosystem: gitsubmodule
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
     commit-message:
       prefix: build
       include: scope

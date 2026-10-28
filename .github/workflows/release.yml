@@ -84,10 +84,12 @@ jobs:
 
           mkdir -p dist/release
           ARCHIVE="woodchipper-v${VERSION}.tar.gz"
-          tar -czf "dist/release/${ARCHIVE}" \
-            bin .pi .claude .claude-plugin skills playbooks scripts vendor node_modules .woodchipper/pi \
-            woodchipper package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs mise.toml \
-            CLAUDE.md AGENTS.md README.md CHANGELOG.md LICENSE
+          tar --exclude='.pi/flow' --exclude='.git' -czf "dist/release/${ARCHIVE}" \
+            bin .pi .claude .claude-plugin skills playbooks scripts \
+            vendor/MANIFEST.json vendor/overrides/manifest.json vendor/overrides/pi-audit.json \
+            vendor/rea vendor/rea-prompts vendor/pi/package.json vendor/pi/packages/coding-agent \
+            vendor/gliner-runner/packages/onnx-runner woodchipper package.json pnpm-lock.yaml \
+            pnpm-workspace.yaml .pnpmfile.cjs mise.toml CLAUDE.md AGENTS.md README.md CHANGELOG.md LICENSE
 
           (cd dist/release && sha256sum "${ARCHIVE}" > SHA256SUMS)
           node scripts/render-homebrew-formula.mjs \
