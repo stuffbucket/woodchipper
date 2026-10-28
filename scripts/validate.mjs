@@ -293,10 +293,11 @@ if (!fs.existsSync(toolContractsPath)) {
     'inspect_il2cpp_metadata',
     'inspect_gpu_code_objects',
     'inspect_model_artifact',
-    'match_native_functions'
+    'match_native_functions',
+    'diff_binaries'
   ]
-  const scanDirs = ['skills', 'playbooks', '.claude/workflows', '.pi']
-  const filesToCheck = ['CLAUDE.md', 'AGENTS.md']
+  const scanDirs = ['skills', 'playbooks', '.claude/workflows', '.pi', 'site/src/content/docs']
+  const filesToCheck = ['README.md', 'CLAUDE.md', 'AGENTS.md']
   for (const d of scanDirs) {
     const walk = (dir) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

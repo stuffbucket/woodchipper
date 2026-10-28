@@ -17,7 +17,17 @@ You need:
 The first setup installs pinned Node, pnpm, Python, and Java versions, initializes the Git submodules,
 builds two temporary dependency packages in Docker, and builds the local Pi runtime.
 
-## Install & Launch (Single Command)
+## Install via Homebrew (macOS / Linux)
+
+```sh
+brew tap stuffbucket/tap
+brew install woodchipper
+woodchipper
+```
+
+When installed via Homebrew, Woodchipper stores isolated per-target workspaces under `~/woodchipper/workspaces/<workspace>/` by default.
+
+## Install & Launch from Source (Single Command)
 
 ```sh
 git clone https://github.com/stuffbucket/woodchipper.git
