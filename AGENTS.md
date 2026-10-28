@@ -6,7 +6,7 @@ Agent routing and architecture index for `woodchipper`.
 
 | Layer | Location | Role |
 |---|---|---|
-| **Pi Agent Harness** | `bin/woodchipper.mjs`, `.pi/` | Custom Pi harness loading `woodchipper-maximal.ts` (preferred `maximal` provider on `localhost:4141`), `woodchipper-rea.ts` (REA MCP + GLiNER `decide-340m` classifier + 3-bucket ledger + summary guardrails), and `woodchipper-peer.ts` (Claude Code `peerProtocol: 1` UDS A2A bridge) |
+| **Pi Agent Harness** | `bin/woodchipper.mjs`, `.pi/` | Custom Pi harness loading `woodchipper-maximal.ts` (preferred `maximal` provider on `localhost:4141`), `woodchipper-rea.ts` (REA MCP + GLiNER `decide-340m` classifier + 3-bucket ledger + summary guardrails), `woodchipper-peer.ts` (Claude Code `peerProtocol: 1` UDS A2A bridge), and standalone `pi-flow.ts` (4-state RISC flow-control extension: `/goal`, `/branch`, `/loop`, `/monitor`, `/watch`, `/mapreduce`, `/halt`, `/flow`) |
 | **Root Skill Router** | `skills/woodchipper/SKILL.md` | Classifies target artifact + user goal, enforces 5.5-series discipline, and routes to domain sub-skills |
 | **Domain Sub-Skills** | `skills/woodchipper-*/SKILL.md` | 8 focused `<500`-line skills mapping exact REA MCP tools & CLI commands to target families |
 | **Harness Workflows** | `.claude/workflows/*.js` | 5 deterministic multi-agent orchestration scripts (`triage-target`, `trace-feature`, `clean-room-spec`, `security-audit`, `version-diff`) |

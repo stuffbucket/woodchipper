@@ -5,11 +5,18 @@ interface SchemaOptions {
 	description?: string;
 }
 
+interface NumberSchemaOptions extends SchemaOptions {
+	minimum?: number;
+	maximum?: number;
+}
+
 const KindSymbol = Symbol.for("TypeBox.Kind");
 const OptionalSymbol = Symbol.for("TypeBox.Optional");
 
 interface TypeBuilder {
 	String(options?: SchemaOptions): TSchema;
+	Number(options?: NumberSchemaOptions): TSchema;
+	Boolean(options?: SchemaOptions): TSchema;
 	Literal<T extends string | number | boolean>(value: T, options?: SchemaOptions): TSchema;
 	Optional<T extends TSchema>(schema: T): T;
 	Array<T extends TSchema>(items: T, options?: SchemaOptions): TSchema;
@@ -22,6 +29,22 @@ const fallbackType: TypeBuilder = {
 		return {
 			[KindSymbol]: "String",
 			type: "string",
+			...(options?.description ? { description: options.description } : {}),
+		} as unknown as TSchema;
+	},
+	Number(options?: NumberSchemaOptions): TSchema {
+		return {
+			[KindSymbol]: "Number",
+			type: "number",
+			...(options?.description ? { description: options.description } : {}),
+			...(options?.minimum !== undefined ? { minimum: options.minimum } : {}),
+			...(options?.maximum !== undefined ? { maximum: options.maximum } : {}),
+		} as unknown as TSchema;
+	},
+	Boolean(options?: SchemaOptions): TSchema {
+		return {
+			[KindSymbol]: "Boolean",
+			type: "boolean",
 			...(options?.description ? { description: options.description } : {}),
 		} as unknown as TSchema;
 	},

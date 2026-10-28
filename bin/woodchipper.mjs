@@ -202,6 +202,8 @@ export function buildWoodchipperPiArgs(userArgs, modeOverride) {
 		path.join(PROJECT_ROOT, ".pi", "extensions", "woodchipper-rea.ts"),
 		"--extension",
 		path.join(PROJECT_ROOT, ".pi", "extensions", "woodchipper-peer.ts"),
+		"--extension",
+		path.join(PROJECT_ROOT, ".pi", "extensions", "pi-flow.ts"),
 		"--skill",
 		path.join(PROJECT_ROOT, "skills"),
 		"--append-system-prompt",

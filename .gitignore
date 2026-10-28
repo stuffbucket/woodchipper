@@ -3,6 +3,7 @@ node_modules/
 *.log
 .claude/workflows/.runs/
 .woodchipper/
+.pi/flow/
 reports/
 workspaces/
 vendor/gliner-runner/models/

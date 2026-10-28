@@ -27,7 +27,12 @@ Woodchipper can be driven **directly by a human** in an interactive terminal TUI
   - **Session Advertisement:** Writes `~/.claude/sessions/<pid>.json` (`peerProtocol: 1`, `kind: "interactive"`, `name: "woodchipper"`) and a `0600` authentication key at `~/.claude/sessions/<pid>.<sha256(socketPath)>.key`.
   - **UDS Server:** Listens on `/tmp/cc-socks/<pid>.sock` (symlinked at `.woodchipper/peer.sock`). All incoming `user`, `control`, and `a2a` frames require timing-safe `.key` token verification before execution.
   - **Cross-Instance Claude Code Integration:** Any local Claude Code session discovers `woodchipper` via `ListAgents` and can send tasks via `SendMessage({ to: "woodchipper", message: "Triage /path/to/binary" })`. Woodchipper sanitizes XML attributes/tags, prevents `is-reply="true"` auto-reply ping-pong loops, verifies reply sockets against live `~/.claude/sessions/<pid>.json` peers, executes the prompt with `expandPromptTemplates: false`, and returns the settled response when `agent_settled` fires.
-  - **CLI Controller (`scripts/woodchipper-ctl.mjs`):** Inspects live peers (`peers`), queries status (`status`), exports the 3-bucket Evidence Ledger (`ledger`), or sends synchronous (`--wait`) or streaming (`--steer`) prompts over UDS.
+  - **CLI Controller (`scripts/woodchipper-ctl.mjs`):** Inspects live peers (`peers`), queries status (`status`), halts active flows (`halt`), exports the 3-bucket Evidence Ledger (`ledger`), or sends synchronous (`--wait`) or streaming (`--steer`) prompts over UDS.
+
+- **`.pi/extensions/pi-flow.ts` (Standalone RISC-Inspired Flow-Control Extension)**
+  - **Separable & Cross-Platform (`darwin`, `linux`, `win32`):** Zero imports from Woodchipper or REA; communicates with host extensions strictly through `pi.events` (`flow:state`, `flow:progress`, `flow:cmd:halt`, `flow:cmd:status`).
+  - **4-State Deterministic FSM (`IDLE`, `STEPPING`, `POLLING`, `SPAWNING`):** Exposes 7 sequential `model-only` tools (`flow_goal`, `flow_branch`, `flow_loop`, `flow_monitor`, `flow_mapreduce`, `flow_halt`, `flow_status`) and 8 slash commands (`/goal`, `/branch`, `/loop`, `/monitor`, `/watch`, `/mapreduce`, `/halt`, `/flow`). Tools are never hidden; blocked transitions return structured `BUSY_LOCKED` payloads with `retryAfterMs` and `waitHint`.
+  - **Termination & Anti-Deadlock Guards:** Monotonic fuel (`maxIterations <= 50`) and wall-clock TTL deadlines, a 4-slot SHA-256 stagnation ring buffer (`stagnationCount >= 3` auto-halt), session-fenced state persistence, cross-platform ancestor PID tree & harness detection (`claude-code`, `claude-desktop`, `codex`, `copilot-cli`, `pi`, `woodchipper`), and a single-child read-only MapReduce runner (`MAX_CONCURRENCY = 1`, `PI_FLOW_DEPTH = 1`).
 
 ### Configuration Boundary
 
@@ -105,10 +110,11 @@ mise run daemon         # or: pnpm run daemon
 # 5. Inspect or drive live Woodchipper / Claude Code peers over UDS
 mise run ctl -- peers
 mise run ctl -- status woodchipper
+mise run ctl -- halt woodchipper "Stop active monitor"
 mise run ctl -- ledger woodchipper
 mise run ctl -- send woodchipper "Triage /bin/ls" --wait
 
-# 6. Run validation, unit/integration tests, and the 13-mutant security/logic mutation suite
+# 6. Run validation, unit/integration tests (39 tests), and the 28-mutant security/logic mutation suite
 mise run validate       # or: pnpm run validate
 mise run test           # or: pnpm test
 mise run test:mutate    # or: pnpm run test:mutate
@@ -134,13 +140,19 @@ woodchipper/
 │   ├── settings.json                  # Project-local Pi configuration (tools, skills, extensions)
 │   ├── SYSTEM.md                      # Woodchipper 5.5-series system prompt addendum
 │   └── extensions/
-│       ├── woodchipper-rea.ts         # REA MCP wiring, summary-first & git guardrails, tools & commands
-│       ├── woodchipper-peer.ts        # Claude Code peerProtocol:1 UDS server & claude_peers tool
+│       ├── woodchipper-maximal.ts         # Maximal preferred model provider & refusal failover
+│       ├── woodchipper-rea.ts             # REA MCP wiring, summary-first & git guardrails, tools & commands
+│       ├── woodchipper-peer.ts            # Claude Code peerProtocol:1 UDS server & claude_peers tool
+│       ├── pi-flow.ts                     # Standalone RISC-inspired flow-control extension (/goal /branch /loop /monitor /watch /mapreduce /halt /flow)
 │       └── lib/
-│           ├── evidence-ledger.ts     # Atomic 0600 3-bucket Evidence Ledger (.woodchipper/evidence-ledger.json)
-│           ├── triage.ts              # Target-free static triage, playbook loader, & rea doctor summary
-│           ├── peer-protocol.ts       # Authenticated UDS peer server, XML escaping, & peer discovery
-│           └── schema.ts              # JSON Schema builder for Pi extension tools
+│           ├── evidence-ledger.ts         # Atomic 0600 3-bucket Evidence Ledger (workspaces/<slug>/evidence-ledger.json)
+│           ├── triage.ts                  # Target-free static triage, playbook loader, & rea doctor summary
+│           ├── peer-protocol.ts           # Authenticated UDS peer server, XML escaping, & peer discovery
+│           ├── schema.ts                  # JSON Schema builder for Pi extension tools
+│           └── pi-flow/
+│               ├── fsm.ts                 # 4-state mutex FSM, fuel/TTL counters, stagnation guard, & session-fenced state
+│               ├── process-tree.ts        # Cross-platform (macOS, Linux, Windows) ancestor PID tree & harness detector
+│               └── runners.ts             # Predicate evaluator, unified polling runner, & single-child MapReduce runner
 ├── .claude-plugin/
 │   ├── marketplace.json               # Stuffbucket local plugin marketplace manifest
 │   └── plugin.json                    # Claude Code plugin definition
@@ -164,12 +176,14 @@ woodchipper/
 │   ├── build-pi-overlay.mjs            # Stages and builds audited Pi without changing its submodule
 │   ├── build-vendor-overrides.mjs      # Builds isolated proxy-gap packages through Docker Buildx
 │   ├── woodchipper-ctl.mjs            # CLI controller for Claude Code & Woodchipper UDS peers
-│   ├── mutation-test.mjs              # 13-mutant security & logic mutation test runner
+│   ├── mutation-test.mjs              # 28-mutant security & logic mutation test runner
 │   ├── validate.mjs                   # Validates skills, workflows, Pi harness, and vendor manifest
 │   ├── sync-to-stuffbucket-skills.mjs # Copies skills/woodchipper* into ../skills
 │   └── update-vendor.mjs              # Updates vendor/ from upstream git repos
 └── tests/
     ├── validate-woodchipper.test.mjs  # Skill, workflow, and vendor manifest tests
     ├── pi-extension.test.mjs          # Woodchipper REA Pi extension, git blocker, & Evidence Ledger tests
-    └── peer-extension.test.mjs        # Claude Code peerProtocol:1 UDS auth, loop prevention, & A2A tests
+    ├── peer-extension.test.mjs        # Claude Code peerProtocol:1 UDS auth, loop prevention, & A2A tests
+    ├── maximal-extension.test.mjs     # Maximal provider discovery, auth priority, & refusal failover tests
+    └── pi-flow.test.mjs               # Pi Flow FSM, stagnation, cross-platform PID tree, MapReduce depth=1, & /halt tests
 ```

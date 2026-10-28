@@ -968,6 +968,7 @@ export function formatWoodchipperOrientationBanner(params: {
 		'- **Plain English (Appliance Mode):** Just ask, e.g. *"What is `/path/to/binary` and does it phone home?"*, *"How does the license check or export button work?"*, or *"Is this driver safe?"*',
 		"- **Guided Intake (`/start <path>`):** Run `/start /path/to/target` and Woodchipper will fingerprint the file, explain what it is in plain English, and give you 3 tailored investigation choices.",
 		"- **Expert Shortcuts:** `/triage <path>` | `/trace <path> <feature>` | `/audit <path>` | `/clone-spec <path>` | `/ledger` | `/doctor` | `/maximal` | `/gliner`",
+		"- **Flow Control (`pi-flow`):** `/goal <obj>` | `/branch <cond> ? <then> : <else>` | `/loop [interval] <prompt>` | `/monitor <check>` (`/watch`) | `/mapreduce <items> -- <task>` | `/halt` | `/flow`",
 		"",
 		`_Active Model: \`${params.activeModel ?? "maximal/claude-sonnet-5-5-20260301"}\` (auto-failover enabled) • GLiNER \`decide-340m\` Intent Router: \`${params.glinerReady ? "ready" : "active (auto-pull on demand)"}\`_`,
 	].join("\n");

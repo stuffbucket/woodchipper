@@ -72,6 +72,24 @@ async function main() {
 		return;
 	}
 
+	if (cmd === "halt") {
+		const targetName = argv[1] && !argv[1].startsWith("--") ? argv[1] : "woodchipper";
+		const summary = argv.slice(2).filter((a) => !a.startsWith("--")).join(" ").trim() || "Halted via woodchipper-ctl";
+		const peer = findPeer(targetName);
+		if (!peer) {
+			console.error(`No live peer matching '${targetName}' found.`);
+			process.exit(1);
+		}
+		const raw = await sendFrameToPeerSocket(
+			peer.messagingSocketPath,
+			{ type: "a2a", id: crypto.randomUUID(), action: "flow_halt", message: summary },
+			{ targetPid: peer.pid, timeoutMs: 5000 },
+		);
+		const parsed = safeParseJsonFrame(raw);
+		console.log(parsed ? JSON.stringify(parsed, null, 2) : raw);
+		return;
+	}
+
 	if (cmd === "ledger") {
 		const targetName = argv[1] && !argv[1].startsWith("--") ? argv[1] : "woodchipper";
 		const peer = findPeer(targetName);
