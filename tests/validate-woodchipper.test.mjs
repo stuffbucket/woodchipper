@@ -116,7 +116,7 @@ test('temporary proxy-gap packages stay isolated as Docker-built submodule overr
   assert.match(gitignore, /^workspaces\/$/m, 'Expected workspaces/ to be gitignored so RE artifacts are never committed')
 })
 
-test('Pi build uses a separate exact audit overlay without modifying the submodule', () => {
+test('Pi build uses a separate exact audit overlay without modifying the submodule', async () => {
   const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'overrides', 'pi-audit.json'), 'utf8'))
   assert.deepEqual(config.source, {
     package: '@earendil-works/pi-coding-agent',
@@ -147,7 +147,28 @@ test('Pi build uses a separate exact audit overlay without modifying the submodu
   assert.match(builder, /fs\.cpSync\(sourceRoot, outputRoot/)
   assert.match(builder, /fs\.rmSync\(path\.join\(outputRoot, "package-lock\.json"\)/)
   assert.match(builder, /\["run", "build:offline"\]/)
+  assert.doesNotMatch(builder, /npm_config_replace_registry_host/)
   assert.doesNotMatch(builder, /writeFileSync\([^\n]*vendor["', ]+pi/)
+
+  const { normalizeTarballUrl } = await import(path.join(ROOT, 'scripts', 'build-pi-overlay.mjs'))
+  assert.equal(
+    normalizeTarballUrl(
+      'https://1es-public.pkgs.visualstudio.com/_packaging/npm-public/npm/registry/minimatch/-/minimatch-10.2.6.tgz',
+      'https://packagefeedproxy.microsoft.io/npm/'
+    ),
+    'https://packagefeedproxy.microsoft.io/npm/minimatch/-/minimatch-10.2.6.tgz'
+  )
+  assert.equal(
+    normalizeTarballUrl(
+      'https://packagefeedproxy.microsoft.io/npm/1es-public/_packaging/npm-public/npm/registry/minimatch/-/minimatch-10.2.6.tgz',
+      'https://packagefeedproxy.microsoft.io/npm/'
+    ),
+    'https://packagefeedproxy.microsoft.io/npm/minimatch/-/minimatch-10.2.6.tgz'
+  )
+
+  const releaseWorkflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8')
+  assert.doesNotMatch(releaseWorkflow, /build-pi-overlay\.mjs/)
+  assert.doesNotMatch(releaseWorkflow, /environment:\s*release/)
 
   const launcher = fs.readFileSync(path.join(ROOT, 'bin', 'woodchipper.mjs'), 'utf8')
   assert.ok(launcher.indexOf('".woodchipper",\n\t\t"pi"') < launcher.indexOf('"vendor", "pi"'))

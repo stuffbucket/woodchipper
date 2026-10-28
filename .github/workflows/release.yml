@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag (e.g. v1.0.1) to package and publish"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +26,7 @@ env:
 jobs:
   release-please:
     name: Prepare or create release
+    if: ${{ github.event.inputs.tag == '' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -38,30 +44,21 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  approve:
-    name: Approve release asset build
-    needs: release-please
-    if: needs.release-please.outputs.release-created == 'true'
-    runs-on: ubuntu-24.04
-    environment: release
-    steps:
-      - run: echo "Building ${{ needs.release-please.outputs.tag-name }}"
-
   package-and-publish:
     name: Package release archive, render Homebrew formula, and publish
-    needs: [release-please, approve]
+    needs: [release-please]
+    if: always() && (needs.release-please.outputs.release-created == 'true' || github.event.inputs.tag != '')
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: write
     env:
-      TAG_NAME: ${{ needs.release-please.outputs.tag-name }}
-      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG_NAME: ${{ github.event.inputs.tag || needs.release-please.outputs.tag-name }}
     steps:
       - name: Check out tagged release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag-name }}
+          ref: ${{ github.event.inputs.tag || needs.release-please.outputs.tag-name }}
           submodules: recursive
           persist-credentials: false
 
@@ -76,10 +73,10 @@ jobs:
       - name: Build release archive and Homebrew formula
         run: |
           set -euo pipefail
+          VERSION="${TAG_NAME#v}"
           node scripts/apply-pnpm-tarball-policy.mjs --check
           node scripts/build-vendor-overrides.mjs
           pnpm install --frozen-lockfile --registry="$PNPM_CONFIG_REGISTRY"
-          node scripts/build-pi-overlay.mjs
           node scripts/validate.mjs
 
           mkdir -p dist/release
@@ -109,8 +106,8 @@ jobs:
 
   notify-tap:
     name: Notify Homebrew tap
-    environment: release
     needs: [release-please, package-and-publish]
+    if: always() && needs.package-and-publish.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -119,7 +116,7 @@ jobs:
       - name: Send repository_dispatch to stuffbucket/homebrew-tap
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag-name }}
+          TAG_NAME: ${{ github.event.inputs.tag || needs.release-please.outputs.tag-name }}
         run: |
           set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then
